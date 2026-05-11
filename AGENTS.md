@@ -52,6 +52,20 @@ Backend code must use Python 3.11 or newer.
 
 Use clear typing, explicit interfaces, and small modules. Avoid hidden global state except for configuration that is loaded once at service startup.
 
+Every Python file must start with a multiline string header using exactly these fields on separate lines:
+
+```python
+"""
+Author: L. Saetta
+Date Modified: YYYY-MM-DD
+License: MIT
+"""
+```
+
+Use the real last-modified date for `Date Modified`.
+
+Do not place shared provider or domain-layer code under folders named `app` or `apps`. Reserve `app` or `apps` folders for user-visible applications, such as frontend applications or distinct runnable application surfaces.
+
 ### 6. Python quality requirements
 
 All Python code must pass:

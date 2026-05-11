@@ -209,12 +209,14 @@ The assistant backend must call the Garmin data API over HTTP and must never imp
 ├── docker-compose.yml
 ├── services
 │   ├── assistant_api
-│   │   ├── app
+│   │   ├── api
+│   │   ├── orchestration
 │   │   ├── tests
 │   │   ├── pyproject.toml
 │   │   └── Dockerfile
 │   └── garmin_api
-│       ├── app
+│       ├── api
+│       ├── training_data_provider.py
 │       ├── tests
 │       ├── pyproject.toml
 │       └── Dockerfile
@@ -225,6 +227,8 @@ The assistant backend must call the Garmin data API over HTTP and must never imp
 ```
 
 This structure is a recommendation for the initial implementation. Changes are allowed only when they improve clarity while preserving the architecture and service boundaries.
+
+Shared provider and domain-layer modules must not be placed under folders named `app` or `apps`. Those names should be reserved for user-visible applications or distinct runnable application surfaces.
 
 ## 10. Garmin data API contract, initial draft
 
