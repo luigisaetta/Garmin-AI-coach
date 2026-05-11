@@ -65,7 +65,6 @@ GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4
 ASSISTANT_API_URL=
-GARMIN_API_URL=
 LOG_LEVEL=INFO
 ```
 
@@ -90,7 +89,6 @@ The intended service model is:
 
 - `frontend`, a Next.js web application
 - `assistant_api`, a Python assistant backend
-- `garmin_api`, a Python Garmin data API
 
 When `docker-compose.yml` is added, the expected local run command will be:
 
@@ -98,7 +96,8 @@ When `docker-compose.yml` is added, the expected local run command will be:
 docker compose up --build
 ```
 
-The Garmin data API should remain internal to Docker Compose by default. The frontend should communicate with the assistant backend, and the assistant backend should communicate with the Garmin data API over local HTTP.
+The frontend should communicate only with the assistant backend. Assistant
+tools call the local Python Garmin training data provider inside backend code.
 
 ## Specification First
 

@@ -62,9 +62,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
     """Read training data from Garmin Connect through a narrow provider API.
 
     The provider is the only local object that should call the third-party
-    `garminconnect` package directly. Backend HTTP handlers should depend on
-    this class or on the same method contract, while the assistant backend must
-    call the Garmin data API over HTTP instead of importing this provider.
+    `garminconnect` package directly. Assistant tools should use this class
+    through a narrow adapter so Garmin-specific behavior remains isolated from
+    model orchestration code.
 
     A preconfigured client can be injected for tests. When no client is passed,
     the provider creates and authenticates a `garminconnect.Garmin` client using

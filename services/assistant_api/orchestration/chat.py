@@ -6,15 +6,30 @@ License: MIT
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import date
+from typing import Any
 from uuid import uuid4
 
 from services.assistant_api.api.schemas import (
+    DataSource,
     ChatRequest,
     ChatResponse,
     ChatStreamEvent,
 )
+from services.assistant_api.orchestration.responses_tools import (
+    AssistantToolRunner,
+    SYSTEM_PROMPT,
+    build_model_input,
+    build_tool_outputs,
+    get_function_calls,
+    response_output_as_input,
+)
+from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -22,67 +37,217 @@ class AssistantSettings:
     """Runtime settings for the assistant orchestration layer."""
 
     model_id: str
-    garmin_api_url: str
 
 
 class AssistantOrchestrator:
-    """Initial assistant orchestration boundary for frontend chat requests.
+    """Assistant orchestration boundary for frontend chat requests."""
 
-    The first implementation keeps the HTTP contract stable and stream-capable
-    while the next step wires this boundary to OCI Responses API calls and
-    local Garmin API tool calls.
-    """
+    def __init__(
+        self,
+        *,
+        settings: AssistantSettings,
+        inference_client: Any,
+        training_client: TrainingActivitiesClient,
+    ) -> None:
+        """Create an assistant orchestrator.
+
+        Args:
+            settings: Runtime model and service settings.
+            inference_client: OpenAI-compatible client for Responses API calls.
+            training_client: Local training data client used by assistant tools.
+        """
+        self._settings = settings
+        self._inference_client = inference_client
+        self._tool_runner = AssistantToolRunner(training_client)
 
     async def complete_chat(self, request: ChatRequest) -> ChatResponse:
         """Return a complete chat answer for callers that do not stream."""
         conversation_id = request.conversation_id or str(uuid4())
-        answer = self._build_bootstrap_answer(request)
-        return ChatResponse(answer=answer, conversation_id=conversation_id)
+        LOGGER.info(
+            "chat complete start conversation_id=%s history_messages=%d message_length=%d",
+            conversation_id,
+            len(request.messages),
+            len(request.message),
+        )
+        model_input = build_model_input(
+            latest_message=request.message,
+            history=request.messages,
+            current_date=date.today().isoformat(),
+        )
+        LOGGER.info("responses initial request conversation_id=%s", conversation_id)
+        initial_response = self._inference_client.responses.create(
+            model=self._settings.model_id,
+            instructions=SYSTEM_PROMPT,
+            input=model_input,
+            tools=self._tool_runner.tool_definitions(),
+        )
+        function_calls = get_function_calls(initial_response)
+        LOGGER.info(
+            "responses initial result conversation_id=%s tool_calls=%d",
+            conversation_id,
+            len(function_calls),
+        )
 
-    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
-        """Stream the assistant answer as small frontend-friendly chunks."""
-        response = await self.complete_chat(request)
-
-        for chunk in self._split_answer(response.answer):
-            yield ChatStreamEvent(
-                type="message_delta",
-                conversation_id=response.conversation_id,
-                delta=chunk,
+        if not function_calls:
+            LOGGER.info("chat complete done conversation_id=%s", conversation_id)
+            return ChatResponse(
+                answer=initial_response.output_text,
+                conversation_id=conversation_id,
             )
 
+        LOGGER.info("tool execution start conversation_id=%s", conversation_id)
+        tool_outputs = await build_tool_outputs(
+            function_calls=function_calls,
+            tool_runner=self._tool_runner,
+        )
+        LOGGER.info("tool execution done conversation_id=%s", conversation_id)
+        LOGGER.info("responses final request conversation_id=%s", conversation_id)
+        final_response = self._inference_client.responses.create(
+            model=self._settings.model_id,
+            instructions=SYSTEM_PROMPT,
+            input=[
+                *model_input,
+                *response_output_as_input(initial_response),
+                *tool_outputs,
+            ],
+        )
+        LOGGER.info("chat complete done conversation_id=%s", conversation_id)
+        return ChatResponse(
+            answer=final_response.output_text,
+            conversation_id=conversation_id,
+            data_sources=[
+                DataSource(
+                    type="garmin_activity_range",
+                    description="Activities returned by the local training provider.",
+                )
+            ],
+        )
+
+    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
+        """Stream the final model answer through Responses API streaming."""
+        conversation_id = request.conversation_id or str(uuid4())
+        data_sources: list[DataSource] = []
+        LOGGER.info(
+            "chat stream start conversation_id=%s history_messages=%d message_length=%d",
+            conversation_id,
+            len(request.messages),
+            len(request.message),
+        )
+        model_input = build_model_input(
+            latest_message=request.message,
+            history=request.messages,
+            current_date=date.today().isoformat(),
+        )
+        LOGGER.info("responses initial request conversation_id=%s", conversation_id)
+        initial_response = self._inference_client.responses.create(
+            model=self._settings.model_id,
+            instructions=SYSTEM_PROMPT,
+            input=model_input,
+            tools=self._tool_runner.tool_definitions(),
+        )
+        function_calls = get_function_calls(initial_response)
+        LOGGER.info(
+            "responses initial result conversation_id=%s tool_calls=%d",
+            conversation_id,
+            len(function_calls),
+        )
+
+        final_input, data_sources = await self._build_final_stream_input(
+            conversation_id=conversation_id,
+            model_input=model_input,
+            initial_response=initial_response,
+            function_calls=function_calls,
+        )
+
+        LOGGER.info("responses stream request conversation_id=%s", conversation_id)
+        answer = ""
+        stream_manager = self._inference_client.responses.stream(
+            model=self._settings.model_id,
+            instructions=SYSTEM_PROMPT,
+            input=final_input,
+        )
+        with stream_manager as stream:
+            for event in stream:
+                delta = self._extract_stream_delta(event)
+                if delta:
+                    answer += delta
+                    yield ChatStreamEvent(
+                        type="message_delta",
+                        conversation_id=conversation_id,
+                        delta=delta,
+                    )
+
+            final_response = stream.get_final_response()
+            completed_text = str(_get_event_value(final_response, "output_text") or "")
+            if completed_text:
+                answer = completed_text
+
+        LOGGER.info(
+            "responses stream done conversation_id=%s answer_length=%d",
+            conversation_id,
+            len(answer),
+        )
         yield ChatStreamEvent(
             type="message_done",
-            conversation_id=response.conversation_id,
-            answer=response.answer,
-            data_sources=response.data_sources,
+            conversation_id=conversation_id,
+            answer=answer,
+            data_sources=data_sources,
         )
 
-    @staticmethod
-    def _build_bootstrap_answer(request: ChatRequest) -> str:
-        """Build the initial deterministic answer before model wiring exists."""
-        history_count = len(request.messages)
-        return (
-            "Assistant API is ready to receive Garmin coaching questions. "
-            "The current endpoint accepts the latest message and "
-            f"{history_count} history message(s), and streams responses for "
-            "the frontend. Garmin API tool calls and OCI Responses API "
-            "generation will be connected behind this same boundary next."
+    async def _build_final_stream_input(
+        self,
+        *,
+        conversation_id: str,
+        model_input: list[dict[str, str]],
+        initial_response: Any,
+        function_calls: list[Any],
+    ) -> tuple[list[dict[str, Any]], list[DataSource]]:
+        """Build the final streamed model input, executing tools when needed."""
+        if not function_calls:
+            LOGGER.info(
+                "responses stream replays no-tool answer conversation_id=%s",
+                conversation_id,
+            )
+            return model_input, []
+
+        LOGGER.info("tool execution start conversation_id=%s", conversation_id)
+        tool_outputs = await build_tool_outputs(
+            function_calls=function_calls,
+            tool_runner=self._tool_runner,
         )
+        LOGGER.info("tool execution done conversation_id=%s", conversation_id)
+        return [
+            *model_input,
+            *response_output_as_input(initial_response),
+            *tool_outputs,
+        ], [
+            DataSource(
+                type="garmin_activity_range",
+                description="Activities returned by the local training provider.",
+            )
+        ]
 
     @staticmethod
-    def _split_answer(answer: str) -> list[str]:
-        """Split an answer into stable chunks without dropping spaces."""
-        words = answer.split(" ")
-        chunks: list[str] = []
-        current: list[str] = []
+    def _extract_stream_delta(event: Any) -> str:
+        """Extract text deltas from Responses API stream events."""
+        event_type = _get_event_value(event, "type")
+        if event_type in {"response.output_text.delta", "response.refusal.delta"}:
+            return str(_get_event_value(event, "delta") or "")
+        return ""
 
-        for word in words:
-            current.append(word)
-            if len(" ".join(current)) >= 48:
-                chunks.append(" ".join(current) + " ")
-                current = []
+    @staticmethod
+    def _extract_completed_text(event: Any) -> str:
+        """Extract completed text when an SDK stream does not emit deltas."""
+        event_type = _get_event_value(event, "type")
+        if event_type != "response.completed":
+            return ""
 
-        if current:
-            chunks.append(" ".join(current))
+        response = _get_event_value(event, "response")
+        return str(_get_event_value(response, "output_text") or "")
 
-        return chunks
+
+def _get_event_value(event: Any, key: str) -> Any:
+    """Read a Responses stream event value from SDK objects or dictionaries."""
+    if isinstance(event, dict):
+        return event.get(key)
+    return getattr(event, key, None)

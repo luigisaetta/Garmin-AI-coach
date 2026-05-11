@@ -12,12 +12,25 @@ from collections.abc import AsyncIterator
 from fastapi.testclient import TestClient
 
 from services.assistant_api.api.main import create_app, get_orchestrator
-from services.assistant_api.api.schemas import ChatRequest, ChatStreamEvent
-from services.assistant_api.orchestration.chat import AssistantOrchestrator
+from services.assistant_api.api.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ChatStreamEvent,
+)
 
 
-class FakeOrchestrator(AssistantOrchestrator):
+class FakeOrchestrator:
     """Predictable orchestrator used by HTTP endpoint tests."""
+
+    async def complete_chat(self, request: ChatRequest) -> ChatResponse:
+        """Return a deterministic non-streaming response."""
+        return ChatResponse(
+            answer=(
+                f"reply to {request.message} with {len(request.messages)} "
+                "history message(s)"
+            ),
+            conversation_id=request.conversation_id or "generated-id",
+        )
 
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
         """Return two deterministic events for streaming assertions."""
@@ -32,6 +45,16 @@ class FakeOrchestrator(AssistantOrchestrator):
             conversation_id=conversation_id,
             answer=f"reply to {request.message}",
         )
+
+
+class FailingOrchestrator:  # pylint: disable=too-few-public-methods
+    """Orchestrator that simulates an unexpected streaming failure."""
+
+    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
+        """Raise a runtime error during SSE generation."""
+        if request.conversation_id == "__never__":
+            yield ChatStreamEvent(type="message_delta", conversation_id="unused")
+        raise RuntimeError("backend unavailable")
 
 
 def build_client() -> TestClient:
@@ -110,6 +133,29 @@ def test_chat_rejects_empty_message() -> None:
     response = client.post("/chat", json={"message": ""})
 
     assert response.status_code == 422
+
+
+def test_chat_stream_returns_error_event_for_runtime_failure() -> None:
+    """Verify stream errors are sent as SSE events instead of raw tracebacks."""
+    app = create_app()
+    app.dependency_overrides[get_orchestrator] = FailingOrchestrator
+    client = TestClient(app)
+
+    with client.stream(
+        "POST",
+        "/chat/stream",
+        json={"message": "Summarise my week", "conversation_id": "conversation-1"},
+    ) as response:
+        content = response.read().decode("utf-8")
+
+    assert response.status_code == 200
+    assert parse_sse_events(content) == [
+        {
+            "type": "error",
+            "conversation_id": "conversation-1",
+            "delta": "backend unavailable",
+        }
+    ]
 
 
 def parse_sse_events(content: str) -> list[dict[str, object]]:

@@ -32,7 +32,8 @@ This repository follows a spec-driven development approach. The reference specif
 docs/specs/personal_ai_garmin_assistant_spec.md
 ```
 
-The initial architecture is composed of three main services:
+The initial architecture is composed of a frontend, an assistant backend, and a
+local Python Garmin data access layer:
 
 ```text
 Browser
@@ -43,9 +44,9 @@ Next.js frontend
   v
 Assistant backend, Python
   |
-  | local HTTP calls
+  | local Python tool calls
   v
-Garmin data API, Python
+TrainingDataProvider, Python
   |
   | Garmin Connect access
   v
@@ -64,11 +65,11 @@ The frontend provides the web experience: chat, loading states, errors, and resp
 
 ### Assistant backend
 
-The assistant backend receives user questions, decides which Garmin data is needed, calls the local Garmin data API, and builds requests to OCI Enterprise AI using the Responses API.
+The assistant backend receives user questions, decides which Garmin data is needed through model tool calling, calls the local Python training data provider, and builds requests to OCI Enterprise AI using the Responses API.
 
-### Garmin data API
+### Garmin data access layer
 
-The Garmin data API is the only service that knows Garmin Connect implementation details. It handles authentication, data retrieval, activity normalization, Garmin-specific errors, rate limits, and future caching.
+The Garmin data access layer is the only code path that knows Garmin Connect implementation details. It handles authentication, data retrieval, activity normalization, Garmin-specific errors, rate limits, and future caching.
 
 ## Guiding Principles
 
@@ -82,8 +83,8 @@ The Garmin data API is the only service that knows Garmin Connect implementation
 ## Initial Milestones
 
 1. Repository skeleton with Docker Compose, empty services, health endpoints, and a basic frontend page.
-2. Garmin data API foundation with a client wrapper, activity endpoints, and normalized schemas.
-3. Assistant backend foundation with a chat endpoint, Garmin API client, simple date range inference, and OCI Enterprise AI integration.
+2. Garmin data provider foundation with a client wrapper, provider methods, and normalized schemas.
+3. Assistant backend foundation with a chat endpoint, local training provider tools, simple date range inference, and OCI Enterprise AI integration.
 4. Frontend chat flow with input, responses, loading states, and error states.
 5. Local deployment hardening with environment variables, health checks, and operating documentation.
 
