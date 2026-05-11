@@ -313,7 +313,17 @@ Request body:
 ```json
 {
   "message": "Summarise my training this week",
-  "conversation_id": "optional stable id"
+  "conversation_id": "optional stable id",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What did I do yesterday?"
+    },
+    {
+      "role": "assistant",
+      "content": "You completed a run."
+    }
+  ]
 }
 ```
 
@@ -333,6 +343,22 @@ Response body:
 ```
 
 The assistant should include enough source description to make the answer understandable, without exposing raw private payloads unnecessarily.
+
+### 11.3 Streaming chat request
+
+```text
+POST /chat/stream
+```
+
+The request body is the same as `POST /chat`.
+
+The response is a `text/event-stream` stream of server-sent events. Initial event types are:
+
+* `message_delta`, containing partial assistant text in `delta`
+* `message_done`, containing the completed `answer`, `conversation_id`, and safe `data_sources`
+* `error`, reserved for recoverable assistant level failures
+
+The frontend should treat `conversation_id` as stable across all events for the same assistant turn.
 
 ## 12. Generative AI integration
 
