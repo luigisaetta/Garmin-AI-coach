@@ -36,6 +36,27 @@ class FakeProvider:  # pylint: disable=too-few-public-methods
         return [{"activityId": 123, "activityName": "Morning Run"}]
 
 
+class FakeResponses:  # pylint: disable=too-few-public-methods
+    """Fake Responses API surface used to test stateless final calls."""
+
+    def __init__(self) -> None:
+        """Initialize the fake response API with no recorded calls."""
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        """Record response creation calls."""
+        self.calls.append(kwargs)
+        return SimpleNamespace(output_text="final answer")
+
+
+class FakeClient:  # pylint: disable=too-few-public-methods
+    """Fake OpenAI-compatible client for final response tests."""
+
+    def __init__(self) -> None:
+        """Create a fake client with a fake responses resource."""
+        self.responses = FakeResponses()
+
+
 def test_build_user_message_preserves_natural_language_request() -> None:
     """Verify that the model receives the user's natural-language request."""
     message = example02.build_user_message(
@@ -111,3 +132,41 @@ def test_get_function_calls_filters_response_output_items() -> None:
 
     assert len(function_calls) == 1
     assert function_calls[0].name == "list_activities"
+
+
+def test_create_final_response_uses_stateless_input_for_zdr_compatibility() -> None:
+    """Verify final response creation avoids `previous_response_id`."""
+    client = FakeClient()
+    function_call = {
+        "type": "function_call",
+        "call_id": "call_123",
+        "name": "list_activities",
+        "arguments": '{"begin_date": "2026-05-01", "end_date": "2026-05-10"}',
+    }
+    initial_response = SimpleNamespace(id="resp_missing", output=[function_call])
+    tool_outputs = [
+        {
+            "type": "function_call_output",
+            "call_id": "call_123",
+            "output": "[]",
+        }
+    ]
+
+    response = example02.create_final_response(
+        client=client,
+        model="gpt-oss-120b",
+        user_message="Summarize my runs from 2026-05-01 to 2026-05-10.",
+        initial_response=initial_response,
+        tool_outputs=tool_outputs,
+    )
+
+    assert response.output_text == "final answer"
+    assert "previous_response_id" not in client.responses.calls[0]
+    assert client.responses.calls[0]["input"] == [
+        {
+            "role": "user",
+            "content": "Summarize my runs from 2026-05-01 to 2026-05-10.",
+        },
+        function_call,
+        *tool_outputs,
+    ]

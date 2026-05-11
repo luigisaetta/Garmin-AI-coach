@@ -15,6 +15,14 @@ import pytest
 from services.garmin_api.training_data_provider import TrainingDataProvider
 
 
+@pytest.fixture(autouse=True)
+def disable_dotenv_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent local `.env` files from influencing provider unit tests."""
+    monkeypatch.setattr(
+        "services.garmin_api.training_data_provider.load_dotenv", lambda: False
+    )
+
+
 class FakeGarminClient:
     """Fake Garmin Connect client used to test provider behavior."""
 
@@ -98,11 +106,14 @@ def test_list_activities_rejects_invalid_date_format() -> None:
         provider.list_activities("05/01/2026", "2026-05-10")
 
 
-def test_list_activities_removes_excluded_fields_from_activity_payloads() -> None:
-    """Verify that noisy Garmin account metadata is removed recursively."""
+def test_list_activities_masks_pii_fields_from_activity_payloads() -> None:
+    """Verify that potential PII in Garmin payloads is masked recursively."""
     raw_activity = {
         "activityId": 123,
         "activityName": "Morning Run",
+        "beginLatitude": 45.123,
+        "beginLongitude": 9.456,
+        "locationName": "Home",
         "ownerDisplayName": "luigisaetta",
         "ownerFullName": "Luigi Saetta",
         "ownerId": 1749304,
@@ -113,6 +124,7 @@ def test_list_activities_removes_excluded_fields_from_activity_payloads() -> Non
         "metadata": {
             "device": "Garmin",
             "ownerFullName": "Luigi Saetta",
+            "ownerProfileImageUrlLarge": "https://example.test/large.png",
             "userRoles": ["ROLE_FITNESS_USER"],
         },
         "laps": [
@@ -131,12 +143,44 @@ def test_list_activities_removes_excluded_fields_from_activity_payloads() -> Non
         {
             "activityId": 123,
             "activityName": "Morning Run",
-            "metadata": {"device": "Garmin"},
-            "laps": [{"lapIndex": 1}],
+            "beginLatitude": "*****",
+            "beginLongitude": "*****",
+            "locationName": "*****",
+            "ownerDisplayName": "*****",
+            "ownerFullName": "*****",
+            "ownerId": "*****",
+            "ownerProfileImageUrlLarge": "*****",
+            "ownerProfileImageUrlMedium": "*****",
+            "ownerProfileImageUrlSmall": "*****",
+            "userRoles": "*****",
+            "metadata": {
+                "device": "Garmin",
+                "ownerFullName": "*****",
+                "ownerProfileImageUrlLarge": "*****",
+                "userRoles": "*****",
+            },
+            "laps": [{"lapIndex": 1, "ownerId": "*****", "userRoles": "*****"}],
         }
     ]
     assert raw_activity["userRoles"] == ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"]
     assert raw_activity["ownerFullName"] == "Luigi Saetta"
+
+
+def test_list_activities_can_return_unredacted_payloads_when_disabled() -> None:
+    """Verify that PII redaction can be disabled for local debugging."""
+    raw_activity = {
+        "activityId": 123,
+        "ownerFullName": "Luigi Saetta",
+        "beginLatitude": 45.123,
+    }
+    provider = TrainingDataProvider(
+        client=FakeGarminClient([raw_activity]),
+        redact_pii=False,
+    )
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [raw_activity]
 
 
 def test_provider_passes_session_storage_path_to_client_login(

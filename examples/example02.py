@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
+import time
 from typing import Any
 
 from dotenv import load_dotenv
@@ -42,6 +44,8 @@ LIST_ACTIVITIES_TOOL = {
     },
 }
 
+LOGGER = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the Responses API example.
@@ -55,6 +59,36 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("request", help="Natural-language request to ask the model.")
     return parser.parse_args()
+
+
+def configure_example_logging() -> None:
+    """Configure minimal progress logging for the example script."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    configure_logging()
+
+
+def summarize_text(value: str, max_length: int = 120) -> str:
+    """Return a compact one-line summary for log messages.
+
+    Args:
+        value: Text to summarize.
+        max_length: Maximum number of characters to keep.
+
+    Returns:
+        Single-line summary truncated when needed.
+    """
+    compact = " ".join(value.split())
+    if len(compact) <= max_length:
+        return compact
+    return f"{compact[: max_length - 3]}..."
+
+
+def log_duration(start_time: float) -> str:
+    """Format elapsed wall-clock time for logging."""
+    return f"{time.perf_counter() - start_time:.2f}s"
 
 
 def build_user_message(request: str) -> str:
@@ -94,10 +128,22 @@ def run_list_activities_tool(
     Returns:
         JSON string containing the sanitized Garmin activities.
     """
+    start_time = time.perf_counter()
+    LOGGER.info(
+        "Waiting for Garmin list_activities begin_date=%s end_date=%s activity_type=%s",
+        begin_date,
+        end_date,
+        activity_type or "all",
+    )
     activities = provider.list_activities(
         begin_date=begin_date,
         end_date=end_date,
         activity_type=activity_type,
+    )
+    LOGGER.info(
+        "Garmin list_activities returned %d activities in %s",
+        len(activities),
+        log_duration(start_time),
     )
     return json.dumps(activities, default=str)
 
@@ -134,6 +180,28 @@ def get_function_calls(response: Any) -> list[Any]:
         for item in getattr(response, "output", [])
         if getattr(item, "type", None) == "function_call"
     ]
+
+
+def response_output_as_input(response: Any) -> list[dict[str, Any]]:
+    """Convert response output items into stateless follow-up input items.
+
+    Some OpenAI-compatible providers do not retain `previous_response_id`
+    server-side. In that case, the second request can include the first
+    response's output items directly before the tool outputs.
+
+    Args:
+        response: Initial Responses API response object.
+
+    Returns:
+        JSON-serializable response output items.
+    """
+    input_items: list[dict[str, Any]] = []
+    for item in getattr(response, "output", []):
+        if hasattr(item, "model_dump"):
+            input_items.append(item.model_dump(mode="json", exclude_none=True))
+        elif isinstance(item, dict):
+            input_items.append(item)
+    return input_items
 
 
 def build_tool_outputs(
@@ -180,6 +248,51 @@ def build_tool_outputs(
     return tool_outputs
 
 
+def create_final_response(
+    client: Any,
+    model: str,
+    user_message: str,
+    initial_response: Any,
+    tool_outputs: list[dict[str, str]],
+) -> Any:
+    """Create the final model response after local tool execution.
+
+    The function intentionally uses stateless input instead of
+    `previous_response_id`. OCI/OpenAI-compatible deployments configured with
+    Zero Data Retention reject `previous_response_id`, so the example carries
+    the required context forward explicitly.
+
+    Args:
+        client: OpenAI-compatible SDK client.
+        model: Model identifier.
+        user_message: Original user message sent in the first request.
+        initial_response: First Responses API response that requested tools.
+        tool_outputs: Local tool outputs to send back to the model.
+
+    Returns:
+        Final Responses API response.
+    """
+    start_time = time.perf_counter()
+    LOGGER.info("Waiting for Responses API final answer with stateless input")
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "user",
+                "content": user_message,
+            },
+            *response_output_as_input(initial_response),
+            *tool_outputs,
+        ],
+    )
+    LOGGER.info(
+        "Responses API stateless final answer returned in %s: %s",
+        log_duration(start_time),
+        summarize_text(response.output_text),
+    )
+    return response
+
+
 def ask_with_optional_activity_tool(args: argparse.Namespace) -> str:
     """Ask the model a question, allowing one round of Garmin tool use.
 
@@ -192,7 +305,10 @@ def ask_with_optional_activity_tool(args: argparse.Namespace) -> str:
     client = get_inference_client()
     provider = build_provider_from_environment()
     model = get_model_id()
+    user_message = build_user_message(args.request)
 
+    start_time = time.perf_counter()
+    LOGGER.info("Waiting for Responses API initial answer/tool decision")
     response = client.responses.create(
         model=model,
         instructions=(
@@ -203,11 +319,17 @@ def ask_with_optional_activity_tool(args: argparse.Namespace) -> str:
             "the user asks for a specific activity type. Do not invent data "
             "that was not returned by the tool."
         ),
-        input=build_user_message(args.request),
+        input=user_message,
         tools=[LIST_ACTIVITIES_TOOL],
     )
-
     function_calls = get_function_calls(response)
+    LOGGER.info(
+        "Responses API initial call returned %d tool call(s) in %s: %s",
+        len(function_calls),
+        log_duration(start_time),
+        summarize_text(response.output_text),
+    )
+
     if not function_calls:
         return response.output_text
 
@@ -215,17 +337,19 @@ def ask_with_optional_activity_tool(args: argparse.Namespace) -> str:
         function_calls=function_calls,
         provider=provider,
     )
-    final_response = client.responses.create(
+    final_response = create_final_response(
+        client=client,
         model=model,
-        previous_response_id=response.id,
-        input=tool_outputs,
+        user_message=user_message,
+        initial_response=response,
+        tool_outputs=tool_outputs,
     )
     return final_response.output_text
 
 
 def main() -> None:
     """Run the Responses API example and print the final answer."""
-    configure_logging()
+    configure_example_logging()
     args = parse_args()
     print(ask_with_optional_activity_tool(args))
 

@@ -7,11 +7,19 @@ License: MIT
 from __future__ import annotations
 
 from datetime import date
+import os
 from pathlib import Path
 from typing import Any, Protocol
 
-EXCLUDED_ACTIVITY_KEYS = frozenset(
+from dotenv import load_dotenv
+
+PII_REDACTION_MASK = "*****"
+PII_EXACT_KEYS = frozenset(
     {
+        "beginLatitude",
+        "beginLongitude",
+        "endLatitude",
+        "endLongitude",
         "ownerDisplayName",
         "ownerFullName",
         "ownerId",
@@ -21,6 +29,21 @@ EXCLUDED_ACTIVITY_KEYS = frozenset(
         "userRoles",
     }
 )
+PII_KEY_FRAGMENTS = (
+    "address",
+    "displayname",
+    "email",
+    "fullname",
+    "latitude",
+    "location",
+    "longitude",
+    "owner",
+    "profileimage",
+    "userid",
+    "username",
+)
+BOOLEAN_TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
+BOOLEAN_FALSE_VALUES = frozenset({"0", "false", "no", "n", "off"})
 
 
 class GarminConnectClient(Protocol):
@@ -48,11 +71,12 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
     the supplied Garmin Connect username and password.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         username: str | None = None,
         password: str | None = None,
         session_storage_path: str | None = None,
+        redact_pii: bool | None = None,
         client: GarminConnectClient | None = None,
     ) -> None:
         """Create a training data provider.
@@ -67,6 +91,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
                 `garminconnect` to reuse tokens before performing a credential
                 login, reducing repeated login attempts and Garmin rate-limit
                 risk.
+            redact_pii: Whether potential PII fields should be masked before
+                payloads leave the provider. When omitted, `REDACT_PII` is read
+                from the environment and defaults to enabled.
             client: Optional Garmin-compatible client, primarily intended for
                 tests and local fakes. The object must expose `login` and
                 `get_activities_by_date`.
@@ -77,6 +104,8 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             ImportError: If the `garminconnect` package is not installed and a
                 real client must be created.
         """
+        self._redact_pii = self._resolve_redact_pii(redact_pii)
+
         if client is not None:
             self._client = client
             return
@@ -201,14 +230,14 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
 
         raise ValueError(f"{field_name} must be a date or ISO date string.")
 
-    @classmethod
-    def _sanitize_activity(cls, value: Any) -> Any:
-        """Remove noisy or sensitive fields from Garmin activity payloads.
+    def _sanitize_activity(self, value: Any) -> Any:
+        """Mask potential PII fields from Garmin activity payloads.
 
-        Garmin activity objects may include large account metadata fields that
-        are not useful for coaching analysis and would waste LLM context tokens.
-        This sanitizer removes those fields recursively while preserving the
-        rest of the payload structure for downstream normalization.
+        Garmin activity objects may include account metadata, profile details,
+        and location fields that are not needed for coaching analysis and may be
+        interpreted as personal data by downstream guardrails. This sanitizer
+        masks those values recursively while preserving payload shape for
+        downstream normalization.
 
         Args:
             value: Garmin activity payload or nested value returned by the
@@ -216,16 +245,62 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
 
         Returns:
             A sanitized copy of the supplied value. Dictionaries and lists are
-            copied recursively; scalar values are returned unchanged.
+            copied recursively; scalar values are returned unchanged unless they
+            are associated with a redacted key.
         """
         if isinstance(value, dict):
             return {
-                key: cls._sanitize_activity(nested_value)
+                key: (
+                    PII_REDACTION_MASK
+                    if self._redact_pii and self._is_pii_key(key)
+                    else self._sanitize_activity(nested_value)
+                )
                 for key, nested_value in value.items()
-                if key not in EXCLUDED_ACTIVITY_KEYS
             }
 
         if isinstance(value, list):
-            return [cls._sanitize_activity(item) for item in value]
+            return [self._sanitize_activity(item) for item in value]
 
         return value
+
+    @staticmethod
+    def _resolve_redact_pii(redact_pii: bool | None) -> bool:
+        """Resolve the PII redaction flag from an explicit value or environment.
+
+        Args:
+            redact_pii: Optional explicit setting supplied by callers.
+
+        Returns:
+            `True` when potential PII should be masked.
+
+        Raises:
+            ValueError: If `REDACT_PII` is set to an unsupported boolean value.
+        """
+        if redact_pii is not None:
+            return redact_pii
+
+        load_dotenv()
+        raw_value = os.getenv("REDACT_PII", "true").strip().lower()
+        if raw_value in BOOLEAN_TRUE_VALUES:
+            return True
+        if raw_value in BOOLEAN_FALSE_VALUES:
+            return False
+
+        raise ValueError(
+            "REDACT_PII must be one of: true, false, yes, no, 1, 0, on, off."
+        )
+
+    @staticmethod
+    def _is_pii_key(key: str) -> bool:
+        """Return whether a Garmin payload key likely contains PII.
+
+        Args:
+            key: Payload key to classify.
+
+        Returns:
+            `True` when the key should be redacted before LLM use.
+        """
+        normalized_key = key.lower()
+        return key in PII_EXACT_KEYS or any(
+            fragment in normalized_key for fragment in PII_KEY_FRAGMENTS
+        )

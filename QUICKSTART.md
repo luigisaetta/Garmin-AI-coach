@@ -60,6 +60,7 @@ Expected configuration values include:
 GARMIN_USERNAME=
 GARMIN_PASSWORD=
 GARMIN_SESSION_STORAGE_PATH=.garmin/tokens
+REDACT_PII=true
 GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4

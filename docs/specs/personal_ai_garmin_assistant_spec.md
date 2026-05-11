@@ -194,7 +194,7 @@ Provider responsibilities:
 * Authenticate with Garmin Connect using configuration supplied by environment variables or mounted secret files
 * Reuse Garmin session tokens from `GARMIN_SESSION_STORAGE_PATH` when configured, and save refreshed tokens there after credential login
 * Convert Garmin Connect responses into stable internal models before they are returned by HTTP endpoints
-* Remove noisy or personal account fields that are not useful for coaching analysis, such as `userRoles`, `ownerDisplayName`, `ownerFullName`, `ownerId`, and owner profile image URLs, before data can be passed toward the assistant or LLM context
+* Mask noisy or personal account and location fields that are not useful for coaching analysis, such as `userRoles`, owner metadata, profile image URLs, coordinates, and location names, before data can be passed toward the assistant or LLM context when `REDACT_PII` is enabled
 * Hide Garmin-specific response shapes, exceptions, retries, rate limits, and session handling from the rest of the application
 * Provide a mockable boundary for unit tests and HTTP contract tests
 
@@ -384,6 +384,7 @@ Likely configuration values:
 * Garmin username or credential reference
 * Garmin password or credential reference
 * Garmin session storage path, if used
+* PII redaction flag, `REDACT_PII`, default enabled
 * OCI region, `REGION`
 * Generative AI API key, `GENAI_API_KEY`
 * OpenAI-compatible generative AI base URL derived from `REGION` as `https://inference.generativeai.{REGION}.oci.oraclecloud.com/openai/v1`
