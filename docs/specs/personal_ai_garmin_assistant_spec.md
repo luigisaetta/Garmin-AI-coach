@@ -384,8 +384,9 @@ Likely configuration values:
 * Garmin username or credential reference
 * Garmin password or credential reference
 * Garmin session storage path, if used
-* OCI endpoint
-* OCI authentication configuration
+* OCI region, `REGION`
+* Generative AI API key, `GENAI_API_KEY`
+* OpenAI-compatible generative AI base URL derived from `REGION` as `https://inference.generativeai.{REGION}.oci.oraclecloud.com/openai/v1`
 * OCI model identifier, default `openai.gpt-5.4`
 * Assistant API URL for the frontend
 * Garmin API URL for the assistant backend
@@ -537,7 +538,7 @@ These questions should be resolved before or during implementation:
 
 * Should Garmin sessions be stored on disk, and where inside the container volume?
 * Which Python web framework is selected for each backend service?
-* What exact OCI Enterprise AI SDK or endpoint configuration is required for Responses API usage?
+* Which OCI region should be used as the default development region?
 * Should the assistant keep conversation history locally, and if so, where?
 * Which activity types should be prioritised first, running, cycling, swimming, strength, or all available activities?
 
