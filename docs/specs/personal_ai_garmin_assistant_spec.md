@@ -120,13 +120,15 @@ The assistant backend must not:
 The Garmin data API is responsible for:
 
 * Authenticating with Garmin Connect
-* Encapsulating Garmin Connect access in Python
+* Encapsulating Garmin Connect access in Python through a local training data provider
 * Exposing local HTTP endpoints for activity and training data
 * Normalising Garmin data into stable internal response schemas
 * Handling Garmin specific errors, rate limits, and retries
 * Optionally caching Garmin responses in a future iteration
 
 The Garmin data API must be the only service that knows Garmin Connect implementation details.
+
+The initial Garmin Connect implementation must use a local `TrainingDataProvider` abstraction backed by the open source Python `garminconnect` library. The `garminconnect` dependency must remain inside the Garmin data API service and must not leak into the assistant backend or frontend.
 
 ## 7. Initial container model
 
@@ -164,6 +166,37 @@ Python backend services should use:
 * Clear HTTP boundaries
 
 The exact Python web framework may be selected during implementation. FastAPI is a suitable default because it provides typed request models, OpenAPI documentation, and strong testing support.
+
+### 8.1 Training data provider
+
+The Garmin data API should encapsulate Garmin Connect access behind a provider interface. The initial provider is `TrainingDataProvider`, implemented inside the Garmin data API service and backed by the open source Python `garminconnect` library.
+
+The initial provider interface should expose these operations:
+
+```python
+class TrainingDataProvider:
+    def list_activities(...):
+        ...
+
+    def get_activity(...):
+        ...
+
+    def get_activity_streams(...):
+        ...
+
+    def get_daily_metrics(...):
+        ...
+```
+
+Provider responsibilities:
+
+* Own all direct calls to the `garminconnect` library
+* Authenticate with Garmin Connect using configuration supplied by environment variables or mounted secret files
+* Convert Garmin Connect responses into stable internal models before they are returned by HTTP endpoints
+* Hide Garmin-specific response shapes, exceptions, retries, rate limits, and session handling from the rest of the application
+* Provide a mockable boundary for unit tests and HTTP contract tests
+
+The assistant backend must call the Garmin data API over HTTP and must never import or instantiate `TrainingDataProvider` directly.
 
 ## 9. Suggested repository structure
 
@@ -455,10 +488,12 @@ Deliver:
 
 Deliver:
 
-* Garmin client wrapper
+* `TrainingDataProvider` backed by the Python `garminconnect` library
 * Authentication configuration
 * Activity list endpoint
 * Activity detail endpoint
+* Activity streams endpoint or provider method, if needed by the first assistant workflows
+* Daily metrics endpoint or provider method, if needed by the first assistant workflows
 * Normalised response schemas
 * Tests with mocked Garmin data
 
@@ -494,7 +529,6 @@ Deliver:
 
 These questions should be resolved before or during implementation:
 
-* Which Garmin Connect Python library will be used, if any?
 * Should Garmin sessions be stored on disk, and where inside the container volume?
 * Which Python web framework is selected for each backend service?
 * What exact OCI Enterprise AI SDK or endpoint configuration is required for Responses API usage?
@@ -516,4 +550,3 @@ Examples of architectural changes:
 * Changing the model provider or model identifier
 
 Implementation details that do not affect architecture may be changed without specification updates, provided they remain scoped to the task objective.
-
