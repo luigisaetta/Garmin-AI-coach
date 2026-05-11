@@ -1,0 +1,49 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.pylint.d/
+*.egg-info/
+build/
+dist/
+
+# Conda and virtual environments
+.conda/
+.venv/
+venv/
+env/
+
+# Node and Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Docker and local runtime
+docker-compose.override.yml
+*.pid
+*.log
+
+# IDE and OS files
+.DS_Store
+docs/.DS_Store
+.idea/
+.vscode/
+

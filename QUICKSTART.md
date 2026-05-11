@@ -48,6 +48,12 @@ The environment includes the initial Python runtime and development tools:
 
 Runtime configuration must come from environment variables or mounted secret files. Do not commit credentials or generated secret files.
 
+Start from the sample environment file:
+
+```bash
+cp .env.example .env
+```
+
 Expected configuration values include:
 
 ```bash
