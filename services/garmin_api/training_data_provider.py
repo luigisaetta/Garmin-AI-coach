@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Protocol
 
+EXCLUDED_ACTIVITY_KEYS = frozenset({"userRoles"})
+
 
 class GarminConnectClient(Protocol):
     """Protocol describing the Garmin Connect client methods used here."""
@@ -101,11 +103,12 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             raise ValueError("begin_date must be earlier than or equal to end_date.")
 
         garmin_activity_type = activity_type.strip() if activity_type else ""
-        return self._client.get_activities_by_date(
+        activities = self._client.get_activities_by_date(
             startdate=start.isoformat(),
             enddate=end.isoformat(),
             activitytype=garmin_activity_type,
         )
+        return [self._sanitize_activity(activity) for activity in activities]
 
     @staticmethod
     def _build_client(username: str, password: str) -> GarminConnectClient:
@@ -154,3 +157,32 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
                 ) from exc
 
         raise ValueError(f"{field_name} must be a date or ISO date string.")
+
+    @classmethod
+    def _sanitize_activity(cls, value: Any) -> Any:
+        """Remove noisy or sensitive fields from Garmin activity payloads.
+
+        Garmin activity objects may include large account metadata fields that
+        are not useful for coaching analysis and would waste LLM context tokens.
+        This sanitizer removes those fields recursively while preserving the
+        rest of the payload structure for downstream normalization.
+
+        Args:
+            value: Garmin activity payload or nested value returned by the
+                Garmin Connect client.
+
+        Returns:
+            A sanitized copy of the supplied value. Dictionaries and lists are
+            copied recursively; scalar values are returned unchanged.
+        """
+        if isinstance(value, dict):
+            return {
+                key: cls._sanitize_activity(nested_value)
+                for key, nested_value in value.items()
+                if key not in EXCLUDED_ACTIVITY_KEYS
+            }
+
+        if isinstance(value, list):
+            return [cls._sanitize_activity(item) for item in value]
+
+        return value

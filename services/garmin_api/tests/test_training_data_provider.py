@@ -17,9 +17,12 @@ from services.garmin_api.training_data_provider import TrainingDataProvider
 class FakeGarminClient:
     """Fake Garmin Connect client used to test provider behavior."""
 
-    def __init__(self) -> None:
-        """Initialize the fake client with no recorded calls."""
+    def __init__(self, activities: list[dict[str, Any]] | None = None) -> None:
+        """Initialize the fake client with optional activity payloads."""
         self.calls: list[dict[str, str]] = []
+        self.activities = activities or [
+            {"activityId": 123, "activityName": "Morning Run"}
+        ]
 
     def login(self) -> None:
         """Simulate Garmin Connect login without doing network I/O."""
@@ -35,7 +38,7 @@ class FakeGarminClient:
                 "activitytype": activitytype,
             }
         )
-        return [{"activityId": 123, "activityName": "Morning Run"}]
+        return self.activities
 
 
 def test_list_activities_returns_all_activity_types_by_default() -> None:
@@ -89,3 +92,35 @@ def test_list_activities_rejects_invalid_date_format() -> None:
 
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         provider.list_activities("05/01/2026", "2026-05-10")
+
+
+def test_list_activities_removes_user_roles_from_activity_payloads() -> None:
+    """Verify that noisy Garmin user role metadata is removed recursively."""
+    raw_activity = {
+        "activityId": 123,
+        "activityName": "Morning Run",
+        "userRoles": ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"],
+        "metadata": {
+            "device": "Garmin",
+            "userRoles": ["ROLE_FITNESS_USER"],
+        },
+        "laps": [
+            {
+                "lapIndex": 1,
+                "userRoles": ["ROLE_WELLNESS_USER"],
+            }
+        ],
+    }
+    provider = TrainingDataProvider(client=FakeGarminClient([raw_activity]))
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [
+        {
+            "activityId": 123,
+            "activityName": "Morning Run",
+            "metadata": {"device": "Garmin"},
+            "laps": [{"lapIndex": 1}],
+        }
+    ]
+    assert raw_activity["userRoles"] == ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"]
