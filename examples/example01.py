@@ -8,12 +8,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 from typing import Any
 
 from dotenv import load_dotenv
 
 from services.garmin_api.training_data_provider import TrainingDataProvider
+
+
+def configure_logging() -> None:
+    """Reduce third-party library noise for command-line example output.
+
+    The `garminconnect` library may log warnings for failed intermediate login
+    strategies even when a later strategy or stored session succeeds. This
+    example prints activity JSON to stdout, so it suppresses non-error
+    `garminconnect` log records to keep the output machine-readable.
+    """
+    logging.getLogger("garminconnect").setLevel(logging.ERROR)
 
 
 def parse_args() -> argparse.Namespace:
@@ -78,6 +90,7 @@ def main() -> None:
     It is intended for manual development checks before the Garmin data API HTTP
     service is scaffolded.
     """
+    configure_logging()
     args = parse_args()
     provider = build_provider_from_environment()
     activities = provider.list_activities(
