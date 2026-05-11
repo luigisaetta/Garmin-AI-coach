@@ -8,24 +8,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
-import os
 from typing import Any
 
-from dotenv import load_dotenv
-
-from services.garmin_api.training_data_provider import TrainingDataProvider
-
-
-def configure_logging() -> None:
-    """Reduce third-party library noise for command-line example output.
-
-    The `garminconnect` library may log warnings for failed intermediate login
-    strategies even when a later strategy or stored session succeeds. This
-    example prints activity JSON to stdout, so it suppresses non-error
-    `garminconnect` log records to keep the output machine-readable.
-    """
-    logging.getLogger("garminconnect").setLevel(logging.ERROR)
+from examples.common import (
+    add_activity_range_arguments,
+    build_provider_from_environment,
+    configure_logging,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,47 +29,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="List Garmin Connect activities for a date range."
     )
-    parser.add_argument("start_date", help="Inclusive start date in YYYY-MM-DD format.")
-    parser.add_argument("end_date", help="Inclusive end date in YYYY-MM-DD format.")
-    parser.add_argument(
-        "--activity-type",
-        default=None,
-        help="Optional Garmin activity type, for example running or cycling.",
-    )
+    add_activity_range_arguments(parser, start_name="start_date")
     return parser.parse_args()
-
-
-def build_provider_from_environment() -> TrainingDataProvider:
-    """Create a Garmin training data provider using local environment variables.
-
-    The function loads `.env` when present and reads `GARMIN_USERNAME` and
-    `GARMIN_PASSWORD`. When `GARMIN_SESSION_STORAGE_PATH` is set, Garmin session
-    tokens are loaded from and saved to that path so repeated runs can avoid
-    full credential login. It keeps credential handling outside command-line
-    arguments so secrets are less likely to appear in shell history.
-
-    Returns:
-        A `TrainingDataProvider` authenticated with Garmin Connect credentials.
-
-    Raises:
-        RuntimeError: If either required credential is missing.
-    """
-    load_dotenv()
-
-    username = os.getenv("GARMIN_USERNAME")
-    password = os.getenv("GARMIN_PASSWORD")
-    session_storage_path = os.getenv("GARMIN_SESSION_STORAGE_PATH")
-
-    if not username or not password:
-        raise RuntimeError(
-            "GARMIN_USERNAME and GARMIN_PASSWORD must be set in the environment."
-        )
-
-    return TrainingDataProvider(
-        username=username,
-        password=password,
-        session_storage_path=session_storage_path,
-    )
 
 
 def main() -> None:
