@@ -59,7 +59,7 @@ Expected configuration values include:
 ```bash
 GARMIN_USERNAME=
 GARMIN_PASSWORD=
-GARMIN_SESSION_STORAGE_PATH=
+GARMIN_SESSION_STORAGE_PATH=.garmin/tokens
 OCI_ENDPOINT=
 OCI_AUTH_CONFIG=
 OCI_MODEL_ID=openai.gpt-5.4

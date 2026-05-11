@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.garmin/
 *.pem
 *.key
 *.crt
@@ -46,4 +47,3 @@ docker-compose.override.yml
 docs/.DS_Store
 .idea/
 .vscode/
-

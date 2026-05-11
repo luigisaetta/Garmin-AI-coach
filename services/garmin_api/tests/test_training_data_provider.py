@@ -7,6 +7,7 @@ License: MIT
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -20,12 +21,15 @@ class FakeGarminClient:
     def __init__(self, activities: list[dict[str, Any]] | None = None) -> None:
         """Initialize the fake client with optional activity payloads."""
         self.calls: list[dict[str, str]] = []
+        self.login_tokenstores: list[str | None] = []
         self.activities = activities or [
             {"activityId": 123, "activityName": "Morning Run"}
         ]
 
-    def login(self) -> None:
+    def login(self, tokenstore: str | None = None) -> tuple[str | None, str | None]:
         """Simulate Garmin Connect login without doing network I/O."""
+        self.login_tokenstores.append(tokenstore)
+        return None, None
 
     def get_activities_by_date(
         self, startdate: str, enddate: str, activitytype: str = ""
@@ -133,3 +137,27 @@ def test_list_activities_removes_excluded_fields_from_activity_payloads() -> Non
     ]
     assert raw_activity["userRoles"] == ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"]
     assert raw_activity["ownerFullName"] == "Luigi Saetta"
+
+
+def test_provider_passes_session_storage_path_to_client_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify that the provider configures reusable Garmin session storage."""
+    client = FakeGarminClient()
+    session_path = tmp_path / "garmin-session"
+    monkeypatch.setattr(
+        TrainingDataProvider,
+        "_build_client",
+        staticmethod(lambda username, password: client),
+    )
+
+    provider = TrainingDataProvider(
+        username="user@example.test",
+        password="secret",
+        session_storage_path=str(session_path),
+    )
+
+    provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert client.login_tokenstores == [str(session_path.resolve())]
+    assert session_path.exists()

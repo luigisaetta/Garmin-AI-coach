@@ -7,6 +7,7 @@ License: MIT
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any, Protocol
 
 EXCLUDED_ACTIVITY_KEYS = frozenset(
@@ -25,7 +26,7 @@ EXCLUDED_ACTIVITY_KEYS = frozenset(
 class GarminConnectClient(Protocol):
     """Protocol describing the Garmin Connect client methods used here."""
 
-    def login(self) -> None:
+    def login(self, tokenstore: str | None = None) -> tuple[str | None, str | None]:
         """Authenticate the client session with Garmin Connect."""
 
     def get_activities_by_date(
@@ -51,6 +52,7 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         self,
         username: str | None = None,
         password: str | None = None,
+        session_storage_path: str | None = None,
         client: GarminConnectClient | None = None,
     ) -> None:
         """Create a training data provider.
@@ -59,14 +61,19 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             username: Garmin Connect username or email address. Required when
                 `client` is not supplied.
             password: Garmin Connect password. Required when `client` is not
-                supplied.
+                supplied and no reusable session storage is configured.
+            session_storage_path: Optional path where Garmin session tokens are
+                loaded from and saved to. When present, the provider asks
+                `garminconnect` to reuse tokens before performing a credential
+                login, reducing repeated login attempts and Garmin rate-limit
+                risk.
             client: Optional Garmin-compatible client, primarily intended for
                 tests and local fakes. The object must expose `login` and
                 `get_activities_by_date`.
 
         Raises:
-            ValueError: If username or password is missing when no client is
-                injected.
+            ValueError: If neither credentials nor a session storage path are
+                supplied when no client is injected.
             ImportError: If the `garminconnect` package is not installed and a
                 real client must be created.
         """
@@ -74,11 +81,16 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             self._client = client
             return
 
-        if not username or not password:
-            raise ValueError("Garmin username and password are required.")
+        if not session_storage_path and (not username or not password):
+            raise ValueError(
+                "Garmin username and password are required when session storage "
+                "is not configured."
+            )
 
         self._client = self._build_client(username=username, password=password)
-        self._client.login()
+        self._client.login(
+            tokenstore=self._prepare_session_storage_path(session_storage_path)
+        )
 
     def list_activities(
         self,
@@ -121,7 +133,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         return [self._sanitize_activity(activity) for activity in activities]
 
     @staticmethod
-    def _build_client(username: str, password: str) -> GarminConnectClient:
+    def _build_client(
+        username: str | None, password: str | None
+    ) -> GarminConnectClient:
         """Create a Garmin Connect client from the third-party library.
 
         The import is intentionally lazy so unit tests can exercise the provider
@@ -129,8 +143,8 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         or live Garmin credentials.
 
         Args:
-            username: Garmin Connect username or email address.
-            password: Garmin Connect password.
+            username: Optional Garmin Connect username or email address.
+            password: Optional Garmin Connect password.
 
         Returns:
             An authenticated-capable Garmin Connect client instance.
@@ -138,6 +152,25 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         from garminconnect import Garmin  # pylint: disable=import-outside-toplevel
 
         return Garmin(username, password)
+
+    @staticmethod
+    def _prepare_session_storage_path(session_storage_path: str | None) -> str | None:
+        """Create and normalize the Garmin session token storage path.
+
+        Args:
+            session_storage_path: Optional local path used by `garminconnect` to
+                load and persist reusable session tokens.
+
+        Returns:
+            A normalized string path when session storage is configured,
+            otherwise `None`.
+        """
+        if not session_storage_path:
+            return None
+
+        path = Path(session_storage_path).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
 
     @staticmethod
     def _coerce_date(value: date | str, field_name: str) -> date:

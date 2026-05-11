@@ -42,7 +42,9 @@ def build_provider_from_environment() -> TrainingDataProvider:
     """Create a Garmin training data provider using local environment variables.
 
     The function loads `.env` when present and reads `GARMIN_USERNAME` and
-    `GARMIN_PASSWORD`. It keeps credential handling outside command-line
+    `GARMIN_PASSWORD`. When `GARMIN_SESSION_STORAGE_PATH` is set, Garmin session
+    tokens are loaded from and saved to that path so repeated runs can avoid
+    full credential login. It keeps credential handling outside command-line
     arguments so secrets are less likely to appear in shell history.
 
     Returns:
@@ -55,13 +57,18 @@ def build_provider_from_environment() -> TrainingDataProvider:
 
     username = os.getenv("GARMIN_USERNAME")
     password = os.getenv("GARMIN_PASSWORD")
+    session_storage_path = os.getenv("GARMIN_SESSION_STORAGE_PATH")
 
     if not username or not password:
         raise RuntimeError(
             "GARMIN_USERNAME and GARMIN_PASSWORD must be set in the environment."
         )
 
-    return TrainingDataProvider(username=username, password=password)
+    return TrainingDataProvider(
+        username=username,
+        password=password,
+        session_storage_path=session_storage_path,
+    )
 
 
 def main() -> None:
