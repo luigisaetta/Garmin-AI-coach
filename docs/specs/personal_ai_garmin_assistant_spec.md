@@ -53,7 +53,9 @@ The deployment target is:
 ## 5. High level architecture
 
 The initial system is composed of two runnable services plus a local Python
-Garmin access layer.
+Garmin access layer. In the current initial implementation, the Garmin access
+layer runs inside the assistant backend process behind `TrainingDataProvider`.
+A separate Garmin HTTP service is not part of the current implementation.
 
 ```text
 Browser
@@ -150,6 +152,10 @@ frontend -> http://assistant_api:<port>
 assistant_api -> local Python TrainingDataProvider
 assistant_api -> OCI Enterprise AI endpoint
 ```
+
+The Garmin access layer is intentionally not represented as a separate
+container yet. Adding a standalone Garmin data API container would be an
+architectural change and must update this specification before implementation.
 
 ## 8. Backend implementation approach
 
@@ -387,7 +393,6 @@ Likely configuration values:
 * OpenAI-compatible generative AI base URL derived from `REGION` as `https://inference.generativeai.{REGION}.oci.oraclecloud.com/openai/v1`
 * OCI model identifier, default `openai.gpt-5.4`
 * Assistant API URL for the frontend
-* Garmin API URL for the assistant backend
 * Log level
 
 Secrets must not be committed to the repository.

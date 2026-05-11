@@ -4,7 +4,7 @@
 
 Personal AI Assistant for Garmin training data.
 
-The goal is to build a web based assistant that can answer interactive questions about the user’s Garmin Connect training data. The assistant should read training data on demand through a local Python API, reason over that data using OCI Enterprise AI, and return useful coaching style insights through a Next.js frontend.
+The goal is to build a web based assistant that can answer interactive questions about the user’s Garmin Connect training data. The assistant should read training data on demand through a local Python provider API, reason over that data using OCI Enterprise AI, and return useful coaching style insights through a Next.js frontend.
 
 This repository follows spec driven development. Before changing implementation code, read and follow the specification in:
 
@@ -38,7 +38,7 @@ The initial architecture must stay simple while preserving clear boundaries:
 
 * Python backend services
 * Python Garmin Connect access layer
-* Local HTTP API for training data access
+* Local Python API for training data access
 * Next.js web frontend
 * Docker Compose deployment
 * Ubuntu Linux on an Intel NUC as the target runtime
@@ -103,7 +103,11 @@ The initial service model should include separate containers for:
 
 * Web frontend
 * Assistant backend
-* Local Garmin data API
+
+The current initial implementation keeps Garmin Connect access inside the
+assistant backend container behind the Python `TrainingDataProvider` boundary.
+A separate local Garmin data API container may be introduced later only after
+the specification is updated for that architectural change.
 
 Additional containers may be added only when justified by the specification or by an explicit task.
 
@@ -111,7 +115,9 @@ Additional containers may be added only when justified by the specification or b
 
 Garmin Connect integration must be encapsulated behind a Python API.
 
-The assistant backend must not access Garmin Connect directly. It must call the local HTTP API exposed by the Garmin data service.
+The assistant backend must not use Garmin Connect package calls directly in
+orchestration code. It must call the local Python provider boundary exposed by
+the Garmin data access layer.
 
 This boundary keeps authentication, data retrieval, caching, rate limits, and vendor specific behaviour isolated from the assistant logic.
 
@@ -125,7 +131,9 @@ The initial target model is:
 
 Python code that interacts with the model must use the Responses API.
 
-Do not introduce MCP servers in the initial implementation. Tool access to training data is represented by ordinary local HTTP calls to the Garmin data API.
+Do not introduce MCP servers in the initial implementation. Tool access to
+training data is represented by ordinary local calls to the Python Garmin data
+provider boundary.
 
 ### 11. Security and privacy
 

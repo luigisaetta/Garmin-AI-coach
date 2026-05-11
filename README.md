@@ -32,8 +32,8 @@ This repository follows a spec-driven development approach. The reference specif
 docs/specs/personal_ai_garmin_assistant_spec.md
 ```
 
-The initial architecture is composed of a frontend, an assistant backend, and a
-local Python Garmin data access layer:
+The initial architecture is composed of two runnable services and a local
+Python Garmin data access layer:
 
 ```text
 Browser
@@ -69,7 +69,9 @@ The assistant backend receives user questions, decides which Garmin data is need
 
 ### Garmin data access layer
 
-The Garmin data access layer is the only code path that knows Garmin Connect implementation details. It handles authentication, data retrieval, activity normalization, Garmin-specific errors, rate limits, and future caching.
+The Garmin data access layer is the only code path that knows Garmin Connect implementation details. In the current implementation it runs inside the assistant backend process behind `TrainingDataProvider`. It handles authentication, data retrieval, PII redaction, Garmin-specific errors, rate limits, and future caching.
+
+The project does not currently expose a separate Garmin HTTP API container. That remains a future architectural option if the specification is updated first.
 
 ## Guiding Principles
 
@@ -98,8 +100,21 @@ The project now has a first working vertical slice:
 - Initial model tool calling with `list_activities`, backed by the local Python `TrainingDataProvider`.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
 - Backend logging for request flow, model calls, tool execution, and stream completion.
+- Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.
 
 The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data.
+
+## Local Docker Runtime
+
+Create a local `.env` from `.env.example`, fill in private values, then run:
+
+```bash
+docker compose up --build
+```
+
+The frontend is exposed at `http://localhost:3000`. The assistant backend is exposed at `http://localhost:8000` for local debugging and is reached by the frontend inside Docker through `http://assistant_api:8000`.
+
+If one of those host ports is already in use, override `FRONTEND_PORT` or `ASSISTANT_API_PORT` in `.env`.
 
 ## Quickstart
 

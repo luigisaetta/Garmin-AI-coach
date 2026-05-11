@@ -2,7 +2,7 @@
 
 This guide prepares a local runtime and development environment for Garmin AI Coach.
 
-The project is currently in the specification and skeleton phase. The commands below establish the shared environment that future backend services, tests, and quality checks should use.
+The project currently has a first working vertical slice: a Next.js frontend, a FastAPI assistant backend, Responses API integration, and a local Python Garmin data provider boundary. The commands below prepare the local development and Docker runtime.
 
 ## Prerequisites
 
@@ -85,19 +85,44 @@ Once Python services are scaffolded, prefer running checks from each service dir
 
 ## Docker Compose Runtime
 
-The intended service model is:
+The current Docker Compose runtime is:
 
 - `frontend`, a Next.js web application
-- `assistant_api`, a Python assistant backend
+- `assistant_api`, a Python assistant backend that uses the local `TrainingDataProvider`
 
-When `docker-compose.yml` is added, the expected local run command will be:
+Create a local `.env` file first:
+
+```bash
+cp .env.example .env
+```
+
+Fill in private Garmin and OCI values, then start the stack:
 
 ```bash
 docker compose up --build
 ```
 
-The frontend should communicate only with the assistant backend. Assistant
-tools call the local Python Garmin training data provider inside backend code.
+The frontend is available at:
+
+```text
+http://localhost:3000
+```
+
+If port `3000` is already in use, set `FRONTEND_PORT=3001` in `.env` and open `http://localhost:3001` instead.
+
+The assistant backend is exposed for local debugging at:
+
+```text
+http://localhost:8000
+```
+
+Inside Docker, the frontend calls the backend through:
+
+```text
+http://assistant_api:8000
+```
+
+The frontend should communicate only with the assistant backend. Assistant tools call the local Python Garmin training data provider inside backend code. A standalone Garmin data API container is not part of the current implementation.
 
 ## Specification First
 

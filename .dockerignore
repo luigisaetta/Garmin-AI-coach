@@ -1,0 +1,10 @@
+.env
+.git
+.garmin
+.next
+.pylint.d
+__pycache__
+*.pyc
+frontend/.next
+frontend/node_modules
+node_modules
