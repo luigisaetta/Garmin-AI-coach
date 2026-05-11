@@ -91,6 +91,10 @@ The Garmin data API is the only service that knows Garmin Connect implementation
 
 The project is in the initial definition and skeleton phase. The technical direction is already defined in the specification, while implementation will proceed through small, testable steps.
 
+## Quickstart
+
+See `QUICKSTART.md` for local runtime and development environment setup.
+
 Before changing application code, read:
 
 ```text

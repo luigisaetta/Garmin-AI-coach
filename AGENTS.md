@@ -60,6 +60,17 @@ All Python code must pass:
 * `black`
 * `pylint`
 
+Use the Conda environment named `garmin-ai-coach` for Python quality commands.
+
+Run Python checks from an activated environment:
+
+```text
+conda activate garmin-ai-coach
+pytest
+black .
+pylint <python_package_or_module_paths>
+```
+
 Tests must be written with `pytest`.
 
 New behaviour must include tests. Bug fixes must include regression tests unless the task explicitly states otherwise.
