@@ -90,7 +90,16 @@ The Garmin data access layer is the only code path that knows Garmin Connect imp
 
 ## Project Status
 
-The project is in the initial definition and skeleton phase. The technical direction is already defined in the specification, while implementation will proceed through small, testable steps.
+The project now has a first working vertical slice:
+
+- A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
+- A FastAPI assistant backend exposing `/health`, `/chat`, and `/chat/stream`.
+- Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
+- Initial model tool calling with `list_activities`, backed by the local Python `TrainingDataProvider`.
+- A Garmin Connect provider foundation with PII redaction and mocked tests.
+- Backend logging for request flow, model calls, tool execution, and stream completion.
+
+The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data.
 
 ## Quickstart
 
