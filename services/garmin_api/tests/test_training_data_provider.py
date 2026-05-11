@@ -94,19 +94,27 @@ def test_list_activities_rejects_invalid_date_format() -> None:
         provider.list_activities("05/01/2026", "2026-05-10")
 
 
-def test_list_activities_removes_user_roles_from_activity_payloads() -> None:
-    """Verify that noisy Garmin user role metadata is removed recursively."""
+def test_list_activities_removes_excluded_fields_from_activity_payloads() -> None:
+    """Verify that noisy Garmin account metadata is removed recursively."""
     raw_activity = {
         "activityId": 123,
         "activityName": "Morning Run",
+        "ownerDisplayName": "luigisaetta",
+        "ownerFullName": "Luigi Saetta",
+        "ownerId": 1749304,
+        "ownerProfileImageUrlLarge": "https://example.test/large.png",
+        "ownerProfileImageUrlMedium": "https://example.test/medium.png",
+        "ownerProfileImageUrlSmall": "https://example.test/small.png",
         "userRoles": ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"],
         "metadata": {
             "device": "Garmin",
+            "ownerFullName": "Luigi Saetta",
             "userRoles": ["ROLE_FITNESS_USER"],
         },
         "laps": [
             {
                 "lapIndex": 1,
+                "ownerId": 1749304,
                 "userRoles": ["ROLE_WELLNESS_USER"],
             }
         ],
@@ -124,3 +132,4 @@ def test_list_activities_removes_user_roles_from_activity_payloads() -> None:
         }
     ]
     assert raw_activity["userRoles"] == ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"]
+    assert raw_activity["ownerFullName"] == "Luigi Saetta"

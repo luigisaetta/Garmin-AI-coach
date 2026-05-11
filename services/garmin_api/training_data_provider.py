@@ -9,7 +9,17 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Protocol
 
-EXCLUDED_ACTIVITY_KEYS = frozenset({"userRoles"})
+EXCLUDED_ACTIVITY_KEYS = frozenset(
+    {
+        "ownerDisplayName",
+        "ownerFullName",
+        "ownerId",
+        "ownerProfileImageUrlLarge",
+        "ownerProfileImageUrlMedium",
+        "ownerProfileImageUrlSmall",
+        "userRoles",
+    }
+)
 
 
 class GarminConnectClient(Protocol):

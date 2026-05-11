@@ -193,7 +193,7 @@ Provider responsibilities:
 * Own all direct calls to the `garminconnect` library
 * Authenticate with Garmin Connect using configuration supplied by environment variables or mounted secret files
 * Convert Garmin Connect responses into stable internal models before they are returned by HTTP endpoints
-* Remove noisy fields that are not useful for coaching analysis, such as `userRoles`, before data can be passed toward the assistant or LLM context
+* Remove noisy or personal account fields that are not useful for coaching analysis, such as `userRoles`, `ownerDisplayName`, `ownerFullName`, `ownerId`, and owner profile image URLs, before data can be passed toward the assistant or LLM context
 * Hide Garmin-specific response shapes, exceptions, retries, rate limits, and session handling from the rest of the application
 * Provide a mockable boundary for unit tests and HTTP contract tests
 
