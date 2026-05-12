@@ -14,7 +14,7 @@ from datetime import date
 from functools import lru_cache
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from services.assistant_api.api.schemas import (
@@ -24,12 +24,14 @@ from services.assistant_api.api.schemas import (
     NutritionDiaryEntryRequest,
     NutritionDiaryEntryResponse,
     NutritionDiaryEntryUpdateRequest,
+    NutritionPlanResponse,
 )
 from services.assistant_api.nutrition.diary import (
     NutritionDiaryEntry,
     NutritionDiaryEntryInput,
     NutritionDiaryService,
 )
+from services.assistant_api.nutrition.plan import NutritionPlan, NutritionPlanService
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
     AssistantSettings,
@@ -79,6 +81,15 @@ def get_nutrition_diary_service() -> NutritionDiaryService:
     database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
     LOGGER.info("nutrition diary service init database_path=%s", database_path)
     return NutritionDiaryService(database_path)
+
+
+@lru_cache(maxsize=1)
+def get_nutrition_plan_service() -> NutritionPlanService:
+    """Create the local nutrition plan persistence service once."""
+    load_dotenv()
+    database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
+    LOGGER.info("nutrition plan service init database_path=%s", database_path)
+    return NutritionPlanService(database_path)
 
 
 def get_orchestrator() -> AssistantOrchestrator:
@@ -189,6 +200,51 @@ def create_app() -> FastAPI:
         )
         return _diary_entry_response(entry)
 
+    @api.post(
+        "/nutrition/plan",
+        response_model=NutritionPlanResponse,
+    )
+    async def upload_nutrition_plan(
+        file: UploadFile = File(...),
+        plan_service: NutritionPlanService = Depends(get_nutrition_plan_service),
+    ) -> NutritionPlanResponse:
+        """Replace the current nutrition plan with an uploaded PDF."""
+        content_type = file.content_type or "application/octet-stream"
+        if content_type != "application/pdf":
+            raise HTTPException(
+                status_code=415, detail="Only PDF uploads are supported"
+            )
+
+        pdf_bytes = await file.read()
+        if not pdf_bytes:
+            raise HTTPException(status_code=422, detail="Uploaded PDF is empty")
+
+        LOGGER.info("nutrition plan upload request filename=%s", file.filename)
+        try:
+            plan = plan_service.replace_current_plan(
+                original_filename=file.filename or "nutrition-plan.pdf",
+                content_type=content_type,
+                pdf_bytes=pdf_bytes,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return _nutrition_plan_response(plan)
+
+    @api.get(
+        "/nutrition/plan/current",
+        response_model=NutritionPlanResponse,
+    )
+    async def get_current_nutrition_plan(
+        plan_service: NutritionPlanService = Depends(get_nutrition_plan_service),
+    ) -> NutritionPlanResponse:
+        """Return the current nutrition plan extracted from an uploaded PDF."""
+        LOGGER.info("nutrition plan get current request")
+        plan = plan_service.get_current_plan()
+        if plan is None:
+            raise HTTPException(status_code=404, detail="Nutrition plan not found")
+        return _nutrition_plan_response(plan)
+
     return api
 
 
@@ -223,6 +279,19 @@ def _diary_entry_response(
         notes=entry.notes,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+    )
+
+
+def _nutrition_plan_response(plan: NutritionPlan) -> NutritionPlanResponse:
+    """Convert a stored nutrition plan into the API response schema."""
+    return NutritionPlanResponse(
+        id=plan.id,
+        original_filename=plan.original_filename,
+        content_type=plan.content_type,
+        file_sha256=plan.file_sha256,
+        extracted_text=plan.extracted_text,
+        uploaded_at=plan.uploaded_at,
+        updated_at=plan.updated_at,
     )
 
 

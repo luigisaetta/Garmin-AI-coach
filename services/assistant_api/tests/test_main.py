@@ -11,14 +11,19 @@ from collections.abc import AsyncIterator
 
 from fastapi.testclient import TestClient
 
-from services.assistant_api.api.main import create_app, get_orchestrator
-from services.assistant_api.api.main import get_nutrition_diary_service
+from services.assistant_api.api.main import (
+    create_app,
+    get_nutrition_diary_service,
+    get_nutrition_plan_service,
+    get_orchestrator,
+)
 from services.assistant_api.api.schemas import (
     ChatRequest,
     ChatResponse,
     ChatStreamEvent,
 )
 from services.assistant_api.nutrition.diary import NutritionDiaryService
+from services.assistant_api.nutrition.plan import NutritionPlanService
 
 
 class FakeOrchestrator:
@@ -72,6 +77,19 @@ def build_client_with_diary(tmp_path) -> TestClient:
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_nutrition_diary_service] = lambda: (
         NutritionDiaryService(tmp_path / "nutrition.db")
+    )
+    return TestClient(app)
+
+
+def build_client_with_plan(tmp_path) -> TestClient:
+    """Create a test client with a temporary nutrition plan database."""
+    app = create_app()
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_nutrition_plan_service] = lambda: (
+        NutritionPlanService(
+            tmp_path / "nutrition.db",
+            text_extractor=lambda pdf_bytes: pdf_bytes.decode("utf-8"),
+        )
     )
     return TestClient(app)
 
@@ -268,6 +286,71 @@ def test_get_nutrition_diary_entry_returns_404_for_missing_day(tmp_path) -> None
     response = client.get("/nutrition/diary-entries/2026-05-12")
 
     assert response.status_code == 404
+
+
+def test_upload_nutrition_plan_replaces_current_plan(tmp_path) -> None:
+    """Verify PDF upload stores the current nutrition plan text."""
+    client = build_client_with_plan(tmp_path)
+
+    response = client.post(
+        "/nutrition/plan",
+        files={"file": ("plan.pdf", b"Breakfast plan", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == 1
+    assert body["original_filename"] == "plan.pdf"
+    assert body["content_type"] == "application/pdf"
+    assert body["extracted_text"] == "Breakfast plan"
+    assert len(body["file_sha256"]) == 64
+
+    updated_response = client.post(
+        "/nutrition/plan",
+        files={"file": ("new-plan.pdf", b"Lunch plan", "application/pdf")},
+    )
+
+    assert updated_response.status_code == 200
+    updated = updated_response.json()
+    assert updated["id"] == body["id"]
+    assert updated["original_filename"] == "new-plan.pdf"
+    assert updated["extracted_text"] == "Lunch plan"
+    assert updated["file_sha256"] != body["file_sha256"]
+
+
+def test_get_current_nutrition_plan_returns_uploaded_plan(tmp_path) -> None:
+    """Verify clients can read the currently uploaded nutrition plan."""
+    client = build_client_with_plan(tmp_path)
+    client.post(
+        "/nutrition/plan",
+        files={"file": ("plan.pdf", b"Breakfast plan", "application/pdf")},
+    )
+
+    response = client.get("/nutrition/plan/current")
+
+    assert response.status_code == 200
+    assert response.json()["extracted_text"] == "Breakfast plan"
+
+
+def test_get_current_nutrition_plan_returns_404_when_missing(tmp_path) -> None:
+    """Verify missing nutrition plans return a not-found response."""
+    client = build_client_with_plan(tmp_path)
+
+    response = client.get("/nutrition/plan/current")
+
+    assert response.status_code == 404
+
+
+def test_upload_nutrition_plan_rejects_non_pdf(tmp_path) -> None:
+    """Verify the upload endpoint accepts only PDF files."""
+    client = build_client_with_plan(tmp_path)
+
+    response = client.post(
+        "/nutrition/plan",
+        files={"file": ("plan.txt", b"Breakfast plan", "text/plain")},
+    )
+
+    assert response.status_code == 415
 
 
 def parse_sse_events(content: str) -> list[dict[str, object]]:

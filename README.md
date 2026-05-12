@@ -73,17 +73,24 @@ The Garmin data access layer is the only code path that knows Garmin Connect imp
 
 The project does not currently expose a separate Garmin HTTP API container. That remains a future architectural option if the specification is updated first.
 
-### Nutrition diary persistence
+### Nutrition persistence
 
 The frontend also includes an early nutrition diary page for the planned
 nutrition adherence extension. The page lets the user select a diary date,
 choose the training context for the day, describe meals and notes in free text,
 and save or update the selected day.
 
-The assistant backend persists diary entries in a local SQLite database through
-a dedicated nutrition service. Docker Compose mounts the database directory on
-the `assistant-data` volume so entries survive container stop and restart. The
-current MVP does not parse nutrition plans or perform adherence analysis yet.
+The same page includes a nutrition-plan upload widget. The user can upload one
+PDF nutrition plan; uploading a new PDF replaces the previous current plan. The
+assistant backend extracts text from the PDF and stores that text, plus basic
+metadata, in the local SQLite database. The original PDF is not retained by the
+current MVP.
+
+The assistant backend persists diary entries and the current nutrition plan
+through dedicated nutrition services. Docker Compose mounts the database
+directory on the `assistant-data` volume so entries and the current plan survive
+container stop and restart. The current MVP does not perform adherence analysis
+yet.
 
 ## Guiding Principles
 
@@ -101,7 +108,7 @@ current MVP does not parse nutrition plans or perform adherence analysis yet.
 3. Assistant backend foundation with a chat endpoint, local training provider tools, simple date range inference, and OCI Enterprise AI integration.
 4. Frontend chat flow with input, responses, loading states, and error states.
 5. Local deployment hardening with environment variables, health checks, and operating documentation.
-6. Nutrition diary MVP with navigation from the chat page, date selection, training context selection, free-text meal notes, local draft preview, and SQLite-backed persistence for one day at a time.
+6. Nutrition MVP with navigation from the chat page, date selection, training context selection, free-text meal notes, local draft preview, SQLite-backed diary persistence for one day at a time, and single-current-plan PDF upload with extracted text storage.
 
 ## Project Status
 
@@ -109,16 +116,16 @@ The project now has a first working vertical slice:
 
 - A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
 - A frontend navigation menu linking the coaching chat and the food diary page.
-- A nutrition diary UI with date selection, training type selection, meal descriptions, notes, local draft preview, and save/update flows.
-- A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, and nutrition diary endpoints.
-- SQLite-backed nutrition diary persistence through a dedicated backend service.
+- A nutrition diary UI with date selection, training type selection, meal descriptions, notes, local draft preview, save/update flows, and a PDF nutrition-plan upload widget.
+- A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, nutrition diary endpoints, and nutrition-plan upload/read endpoints.
+- SQLite-backed nutrition diary and nutrition-plan persistence through dedicated backend services.
 - Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
 - Initial model tool calling with `list_activities` and `get_heart_rates`, backed by the local Python `TrainingDataProvider`.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
 - Backend logging for request flow, model calls, tool execution, and stream completion.
 - Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.
 
-The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data. The nutrition diary MVP stores daily entries locally, but period reads, nutrition-plan uploads, and adherence analysis are still future work.
+The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data. The nutrition MVP stores daily entries and one current extracted nutrition plan locally, but period reads and adherence analysis are still future work.
 
 ## Local Docker Runtime
 
@@ -132,12 +139,13 @@ The frontend is exposed at `http://localhost:3000`. The assistant backend is exp
 
 If one of those host ports is already in use, override `FRONTEND_PORT` or `ASSISTANT_API_PORT` in `.env`.
 
-Nutrition diary entries are stored in SQLite at `NUTRITION_DB_PATH`. Docker
-Compose defaults this to `/data/garmin_ai_coach.db` inside the assistant API
-container and persists `/data` through the `assistant-data` named volume. The
-database survives `docker compose stop`, `docker compose restart`, and
-`docker compose down`; it is removed only if volumes are explicitly deleted,
-for example with `docker compose down -v`.
+Nutrition diary entries and extracted nutrition-plan text are stored in SQLite
+at `NUTRITION_DB_PATH`. Docker Compose defaults this to
+`/data/garmin_ai_coach.db` inside the assistant API container and persists
+`/data` through the `assistant-data` named volume. The database survives
+`docker compose stop`, `docker compose restart`, and `docker compose down`; it
+is removed only if volumes are explicitly deleted, for example with
+`docker compose down -v`.
 
 ### Runtime Configuration
 

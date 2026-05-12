@@ -12,7 +12,9 @@ dependencies:
       - httpx
       - openai
       - pydantic
+      - pypdf
       - pylint
       - pytest
       - python-dotenv
+      - python-multipart
       - uvicorn

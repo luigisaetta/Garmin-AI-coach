@@ -210,11 +210,16 @@ Nutrition services must not:
 * Treat model-generated analysis as a clinical decision
 * Log raw diary entries, uploaded documents, or full nutrition prompts by default
 
-The initial nutrition diary implementation uses simple local SQLite
-persistence. The SQLite database is local to the assistant backend service and
-must be stored on a Docker volume in container deployments so diary entries
-survive stop and restart. A separate database container is not part of the
-initial nutrition MVP.
+The initial nutrition implementation uses simple local SQLite persistence. The
+SQLite database is local to the assistant backend service and must be stored on
+a Docker volume in container deployments so diary entries and the current
+nutrition plan survive stop and restart. A separate database container is not
+part of the initial nutrition MVP.
+
+The initial nutrition-plan implementation stores one current plan. Uploading a
+new PDF replaces the previous current plan. The backend extracts all available
+text from the uploaded PDF and stores the extracted text plus metadata in
+SQLite. The original PDF file is not retained in the MVP.
 
 ## 7. Initial container model
 
@@ -348,10 +353,10 @@ The system should not require automatic calorie or macronutrient estimation in
 the first nutrition implementation. Such estimation may be added later only
 with explicit accuracy limits and tests.
 
-Nutrition-plan upload should support Markdown first and PDF as a planned
-format. PDF support must handle extraction failures gracefully and preserve the
-original uploaded document locally only when the configured storage policy
-allows it.
+Nutrition-plan upload should support PDF first for the MVP. PDF support must
+handle extraction failures gracefully. The MVP stores only extracted text and
+metadata; preserving the original uploaded document requires a future explicit
+storage policy update.
 
 ## 9. Suggested repository structure
 
@@ -529,20 +534,20 @@ The frontend should treat `conversation_id` as stable across all events for the 
 ### 11.4 Nutrition API
 
 The nutrition extension may expose ordinary backend HTTP endpoints in addition
-to chat workflows. The diary MVP exposes:
+to chat workflows. The nutrition MVP exposes:
 
 ```text
 POST /nutrition/diary-entries
 PUT /nutrition/diary-entries/{entry_date}
 GET /nutrition/diary-entries/{entry_date}
+POST /nutrition/plan
+GET /nutrition/plan/current
 ```
 
 Future endpoint candidates include:
 
 ```text
 GET /nutrition/diary-entries?begin_date=YYYY-MM-DD&end_date=YYYY-MM-DD
-POST /nutrition/plans
-GET /nutrition/plans/current
 POST /nutrition/reports/weekly
 ```
 

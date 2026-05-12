@@ -98,3 +98,15 @@ class NutritionDiaryEntryResponse(BaseModel):
     notes: str
     created_at: datetime
     updated_at: datetime
+
+
+class NutritionPlanResponse(BaseModel):
+    """Stored current nutrition plan returned by the assistant API."""
+
+    id: int
+    original_filename: str
+    content_type: str
+    file_sha256: str
+    extracted_text: str
+    uploaded_at: datetime
+    updated_at: datetime

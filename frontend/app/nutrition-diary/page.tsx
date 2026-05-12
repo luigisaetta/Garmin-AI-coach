@@ -11,19 +11,23 @@ import {
   Activity,
   BookOpenText,
   CalendarDays,
+  CheckCircle2,
   ClipboardList,
+  FileText,
   MessageSquareText,
   Moon,
   NotebookPen,
   Save,
   Soup,
   Sun,
+  UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "black";
 type DiaryState = "loading" | "editing" | "saved" | "missing" | "error";
+type PlanState = "loading" | "missing" | "ready" | "uploading" | "error";
 
 type NutritionDiaryEntry = {
   id: number;
@@ -32,6 +36,16 @@ type NutritionDiaryEntry = {
   meals_text: string;
   notes: string;
   created_at: string;
+  updated_at: string;
+};
+
+type NutritionPlan = {
+  id: number;
+  original_filename: string;
+  content_type: string;
+  file_sha256: string;
+  extracted_text: string;
+  uploaded_at: string;
   updated_at: string;
 };
 
@@ -60,10 +74,55 @@ export default function NutritionDiaryDemo() {
   const [diaryState, setDiaryState] = useState<DiaryState>("loading");
   const [savedEntry, setSavedEntry] = useState<NutritionDiaryEntry | null>(null);
   const [statusMessage, setStatusMessage] = useState("Loading diary entry");
+  const [planState, setPlanState] = useState<PlanState>("loading");
+  const [nutritionPlan, setNutritionPlan] = useState<NutritionPlan | null>(null);
+  const [planMessage, setPlanMessage] = useState("Checking nutrition plan");
+  const [selectedPlanFile, setSelectedPlanFile] = useState<File | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadCurrentPlan() {
+      setPlanState("loading");
+      setPlanMessage("Checking nutrition plan");
+
+      try {
+        const response = await fetch("/api/nutrition/plan/current", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (response.status === 404) {
+          setNutritionPlan(null);
+          setPlanState("missing");
+          setPlanMessage("No nutrition plan loaded");
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Nutrition plan API returned HTTP ${response.status}`);
+        }
+
+        const plan = (await response.json()) as NutritionPlan;
+        setNutritionPlan(plan);
+        setPlanState("ready");
+        setPlanMessage("Nutrition plan loaded");
+      } catch (caughtError) {
+        if ((caughtError as Error).name === "AbortError") {
+          return;
+        }
+        setPlanState("error");
+        setPlanMessage("Could not load nutrition plan");
+      }
+    }
+
+    loadCurrentPlan();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -126,8 +185,7 @@ export default function NutritionDiaryDemo() {
     [diaryDate],
   );
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveDiaryEntry() {
     const trimmedMeals = meals.trim();
     if (!trimmedMeals) {
       setDiaryState("error");
@@ -167,6 +225,41 @@ export default function NutritionDiaryDemo() {
     } catch {
       setDiaryState("error");
       setStatusMessage("Could not save this diary entry");
+    }
+  }
+
+  async function handlePlanUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPlanFile) {
+      setPlanState("error");
+      setPlanMessage("Choose a PDF nutrition plan first");
+      return;
+    }
+
+    setPlanState("uploading");
+    setPlanMessage("Uploading and extracting PDF text");
+
+    const formData = new FormData();
+    formData.append("file", selectedPlanFile);
+
+    try {
+      const response = await fetch("/api/nutrition/plan", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Nutrition plan API returned HTTP ${response.status}`);
+      }
+
+      const plan = (await response.json()) as NutritionPlan;
+      setNutritionPlan(plan);
+      setSelectedPlanFile(null);
+      setPlanState("ready");
+      setPlanMessage("Nutrition plan uploaded");
+    } catch {
+      setPlanState("error");
+      setPlanMessage("Could not extract text from this PDF");
     }
   }
 
@@ -233,6 +326,29 @@ export default function NutritionDiaryDemo() {
 
         <section className="panel">
           <div className="panelTitle">
+            <FileText size={17} />
+            <h2>Nutrition plan</h2>
+          </div>
+          <div
+            className={`statusLine ${
+              planState === "error"
+                ? "offline"
+                : planState === "ready"
+                  ? "online"
+                  : "checking"
+            }`}
+          >
+            {planState === "ready" ? (
+              <CheckCircle2 size={17} />
+            ) : (
+              <FileText size={17} />
+            )}
+            <span>{planMessage}</span>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panelTitle">
             <ClipboardList size={17} />
             <h2>Settings</h2>
           </div>
@@ -272,7 +388,47 @@ export default function NutritionDiaryDemo() {
         </header>
 
         <div className="diaryGrid">
-          <form className="diaryForm" onSubmit={handleSubmit}>
+          <div className="diaryForm">
+            <section className="diaryPanel">
+              <div className="diaryPanelHeader">
+                <span className="diaryIcon" aria-hidden="true">
+                  <UploadCloud size={18} />
+                </span>
+                <span>
+                  <h3>Nutrition plan</h3>
+                  <p>
+                    {nutritionPlan
+                      ? `${nutritionPlan.original_filename} is the current plan`
+                      : "Upload one PDF plan; a new upload replaces the current one"}
+                  </p>
+                </span>
+              </div>
+
+              <form className="planUploadForm" onSubmit={handlePlanUpload}>
+                <label className="field">
+                  <span>PDF file</span>
+                  <input
+                    accept="application/pdf"
+                    type="file"
+                    onChange={(event) => {
+                      setSelectedPlanFile(event.target.files?.[0] ?? null);
+                      setPlanMessage("Ready to upload selected PDF");
+                      setPlanState(nutritionPlan ? "ready" : "missing");
+                    }}
+                  />
+                </label>
+
+                <button
+                  className="primaryAction"
+                  disabled={!selectedPlanFile || planState === "uploading"}
+                  type="submit"
+                >
+                  <UploadCloud size={17} />
+                  <span>{nutritionPlan ? "Replace plan" : "Upload plan"}</span>
+                </button>
+              </form>
+            </section>
+
             <section className="diaryPanel">
               <div className="diaryPanelHeader">
                 <span className="diaryIcon" aria-hidden="true">
@@ -352,13 +508,16 @@ export default function NutritionDiaryDemo() {
               <button
                 className="primaryAction"
                 disabled={diaryState === "loading"}
-                type="submit"
+                type="button"
+                onClick={() => {
+                  void saveDiaryEntry();
+                }}
               >
                 <Save size={17} />
                 <span>{savedEntry ? "Update day" : "Save day"}</span>
               </button>
             </section>
-          </form>
+          </div>
 
           <aside className="entryPreview" aria-label="Current food diary draft">
             <div className="diaryPanelHeader">
@@ -399,6 +558,14 @@ export default function NutritionDiaryDemo() {
                   </dd>
                 </div>
               ) : null}
+              <div>
+                <dt>Nutrition plan</dt>
+                <dd>
+                  {nutritionPlan
+                    ? `${nutritionPlan.original_filename} loaded, ${nutritionPlan.extracted_text.length.toLocaleString("en-US")} extracted characters`
+                    : "No nutrition plan loaded yet."}
+                </dd>
+              </div>
             </dl>
           </aside>
         </div>

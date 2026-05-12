@@ -629,6 +629,12 @@ textarea:disabled {
   min-width: 0;
 }
 
+.planUploadForm {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
 .diaryPanel,
 .entryPreview {
   display: grid;

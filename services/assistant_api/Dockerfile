@@ -10,7 +10,9 @@ RUN pip install --no-cache-dir \
     garminconnect \
     openai \
     pydantic \
+    pypdf \
     python-dotenv \
+    python-multipart \
     uvicorn
 
 COPY services ./services
