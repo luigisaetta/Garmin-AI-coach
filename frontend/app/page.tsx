@@ -9,10 +9,12 @@
 
 import {
   Activity,
+  BookOpenText,
   Bot,
   CheckCircle2,
   CircleAlert,
   Hash,
+  MessageSquareText,
   Moon,
   RotateCcw,
   Send,
@@ -23,6 +25,7 @@ import {
   User,
   Wifi,
 } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -353,6 +356,21 @@ export default function CoachChat() {
             <p>Training intelligence console</p>
           </span>
         </section>
+
+        <nav className="panel navPanel" aria-label="Main navigation">
+          <div className="panelTitle">
+            <MessageSquareText size={17} />
+            <h2>Navigation</h2>
+          </div>
+          <Link className="navItem active" href="/" aria-current="page">
+            <MessageSquareText size={16} />
+            <span>Coach chat</span>
+          </Link>
+          <Link className="navItem" href="/nutrition-diary">
+            <BookOpenText size={16} />
+            <span>Food diary</span>
+          </Link>
+        </nav>
 
         <section className="panel">
           <div className="panelTitle">
