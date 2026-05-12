@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -24,6 +24,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
     def __init__(self) -> None:
         """Initialize captured calls."""
         self.calls: list[dict[str, str | None]] = []
+        self.heart_rate_calls: list[dict[str, str]] = []
 
     async def list_activities(
         self,
@@ -42,6 +43,26 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
         )
         return [{"activityId": 123, "activityName": "Morning Run"}]
 
+    async def get_heart_rates(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Capture the heart-rate request and return one daily payload."""
+        self.heart_rate_calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+        )
+        return {
+            begin_date: {
+                "calendarDate": begin_date,
+                "restingHeartRate": 48,
+            }
+        }
+
 
 class FailingTrainingClient:  # pylint: disable=too-few-public-methods
     """Fake local training client that simulates provider failure."""
@@ -55,6 +76,25 @@ class FailingTrainingClient:  # pylint: disable=too-few-public-methods
     ) -> list[dict[str, Any]]:
         """Raise a provider error."""
         raise ValueError("Training data provider failed.")
+
+    async def get_heart_rates(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Raise a provider error."""
+        raise ValueError("Training data provider failed.")
+
+
+def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
+    """Verify both assistant tool schemas are exposed to the model."""
+    runner = AssistantToolRunner(FakeTrainingClient())
+
+    tool_names = {tool["name"] for tool in runner.tool_definitions()}
+
+    assert tool_names == {"list_activities", "get_heart_rates"}
+    assert "get_heart_rates" in responses_tools.SYSTEM_PROMPT
 
 
 def test_build_model_input_includes_history_and_latest_request() -> None:
@@ -124,6 +164,33 @@ async def test_build_tool_outputs_uses_model_extracted_activity_range() -> None:
 
 
 @pytest.mark.anyio
+async def test_build_tool_outputs_uses_model_extracted_heart_rate_range() -> None:
+    """Verify that heart-rate tool calls use model-extracted date arguments."""
+    training_client = FakeTrainingClient()
+    function_call = SimpleNamespace(
+        type="function_call",
+        name="get_heart_rates",
+        call_id="call_heart_rate",
+        arguments='{"begin_date": "2026-05-04", "end_date": "2026-05-05"}',
+    )
+
+    outputs = await responses_tools.build_tool_outputs(
+        function_calls=[function_call],
+        tool_runner=AssistantToolRunner(training_client),
+    )
+
+    assert training_client.heart_rate_calls == [
+        {
+            "begin_date": "2026-05-04",
+            "end_date": "2026-05-05",
+        }
+    ]
+    assert outputs[0]["type"] == "function_call_output"
+    assert outputs[0]["call_id"] == "call_heart_rate"
+    assert "restingHeartRate" in outputs[0]["output"]
+
+
+@pytest.mark.anyio
 async def test_build_tool_outputs_returns_error_for_missing_dates() -> None:
     """Verify that invalid model tool arguments are returned as tool output."""
     training_client = FakeTrainingClient()
@@ -157,6 +224,22 @@ def test_get_function_calls_supports_sdk_objects_and_dicts() -> None:
     function_calls = responses_tools.get_function_calls(response)
 
     assert len(function_calls) == 2
+
+
+def test_tool_data_sources_describe_unique_requested_tools() -> None:
+    """Verify data-source metadata reflects model-selected Garmin tools."""
+    function_calls = [
+        SimpleNamespace(type="function_call", name="list_activities"),
+        SimpleNamespace(type="function_call", name="get_heart_rates"),
+        SimpleNamespace(type="function_call", name="get_heart_rates"),
+    ]
+
+    data_sources = responses_tools.tool_data_sources(function_calls)
+
+    assert [source.type for source in data_sources] == [
+        "garmin_activity_range",
+        "garmin_heart_rate_range",
+    ]
 
 
 @pytest.mark.anyio

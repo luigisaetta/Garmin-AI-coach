@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -20,6 +20,14 @@ class TrainingActivitiesClient(Protocol):  # pylint: disable=too-few-public-meth
         activity_type: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return activities from the local training data provider."""
+
+    async def get_heart_rates(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return daily heart-rate payloads from the local provider."""
 
 
 class LocalTrainingDataClient:  # pylint: disable=too-few-public-methods
@@ -46,4 +54,16 @@ class LocalTrainingDataClient:  # pylint: disable=too-few-public-methods
             begin_date=begin_date,
             end_date=end_date,
             activity_type=activity_type,
+        )
+
+    async def get_heart_rates(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return daily heart-rate payloads using local Python calls."""
+        return self._provider.get_heart_rates(
+            begin_date=begin_date,
+            end_date=end_date,
         )

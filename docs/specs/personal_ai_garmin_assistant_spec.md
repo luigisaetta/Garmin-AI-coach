@@ -274,6 +274,24 @@ when available:
 * Training effect fields, if available
 * Link or reference to the source activity, if safe to expose locally
 
+### 10.2 `get_heart_rates` tool
+
+Tool arguments:
+
+```json
+{
+  "begin_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD"
+}
+```
+
+The tool returns Garmin daily heart-rate payloads keyed by ISO date for the
+inclusive date range. The assistant should use this tool for resting heart
+rate, daily heart-rate patterns, heart-rate trends, and heart-rate questions
+that are not tied to one specific workout. When a question needs both workout
+context and daily heart-rate context, the assistant may call both
+`list_activities` and `get_heart_rates`.
+
 ## 11. Assistant backend contract, initial draft
 
 ### 11.1 Health check

@@ -27,6 +27,7 @@ from services.assistant_api.orchestration.responses_tools import (
     build_tool_outputs,
     get_function_calls,
     response_output_as_input,
+    tool_data_sources,
 )
 from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
 
@@ -117,12 +118,7 @@ class AssistantOrchestrator:
         return ChatResponse(
             answer=final_response.output_text,
             conversation_id=conversation_id,
-            data_sources=[
-                DataSource(
-                    type="garmin_activity_range",
-                    description="Activities returned by the local training provider.",
-                )
-            ],
+            data_sources=tool_data_sources(function_calls),
             token_usage=combine_token_usage(
                 response_token_usage(initial_response),
                 response_token_usage(final_response),
@@ -230,12 +226,7 @@ class AssistantOrchestrator:
             *model_input,
             *response_output_as_input(initial_response),
             *tool_outputs,
-        ], [
-            DataSource(
-                type="garmin_activity_range",
-                description="Activities returned by the local training provider.",
-            )
-        ]
+        ], tool_data_sources(function_calls)
 
     @staticmethod
     def _extract_stream_delta(event: Any) -> str:

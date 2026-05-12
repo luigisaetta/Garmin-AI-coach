@@ -23,9 +23,10 @@ from services.assistant_api.orchestration.chat import (
 class FakeResponses:  # pylint: disable=too-few-public-methods
     """Fake Responses API resource with deterministic tool-call flow."""
 
-    def __init__(self) -> None:
+    def __init__(self, tool_name: str = "list_activities") -> None:
         """Initialize captured Responses API calls."""
         self.calls: list[dict[str, Any]] = []
+        self.tool_name = tool_name
 
     def create(self, **kwargs: Any) -> Any:
         """Capture model requests and return a tool call, then final answer."""
@@ -41,14 +42,14 @@ class FakeResponses:  # pylint: disable=too-few-public-methods
                 output=[
                     SimpleNamespace(
                         type="function_call",
-                        name="list_activities",
+                        name=self.tool_name,
                         call_id="call_123",
                         arguments=(
                             '{"begin_date": "2026-05-04", ' '"end_date": "2026-05-10"}'
                         ),
                         model_dump=lambda **_: {
                             "type": "function_call",
-                            "name": "list_activities",
+                            "name": self.tool_name,
                             "call_id": "call_123",
                             "arguments": (
                                 '{"begin_date": "2026-05-04", '
@@ -136,9 +137,9 @@ class FakeStream:
 class FakeInferenceClient:  # pylint: disable=too-few-public-methods
     """Fake OpenAI-compatible SDK client."""
 
-    def __init__(self) -> None:
+    def __init__(self, tool_name: str = "list_activities") -> None:
         """Initialize fake Responses API resource."""
-        self.responses = FakeResponses()
+        self.responses = FakeResponses(tool_name=tool_name)
 
 
 class FakeTrainingClient:  # pylint: disable=too-few-public-methods
@@ -164,6 +165,22 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
             }
         )
         return [{"activityId": 1, "activityName": "Run"}]
+
+    async def get_heart_rates(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Capture model-extracted heart-rate range arguments."""
+        self.calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "activity_type": "heart_rate",
+            }
+        )
+        return {begin_date: {"calendarDate": begin_date, "restingHeartRate": 48}}
 
 
 @pytest.mark.anyio
@@ -208,6 +225,29 @@ async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
         item.get("type") == "function_call_output"
         for item in inference_client.responses.calls[1]["input"]
     )
+
+
+@pytest.mark.anyio
+async def test_complete_chat_reports_heart_rate_data_source() -> None:
+    """Verify heart-rate tool calls produce heart-rate data-source metadata."""
+    inference_client = FakeInferenceClient(tool_name="get_heart_rates")
+    training_client = FakeTrainingClient()
+    orchestrator = AssistantOrchestrator(
+        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        inference_client=inference_client,
+        training_client=training_client,
+    )
+
+    response = await orchestrator.complete_chat(ChatRequest(message="How was my HR?"))
+
+    assert response.data_sources[0].type == "garmin_heart_rate_range"
+    assert training_client.calls == [
+        {
+            "begin_date": "2026-05-04",
+            "end_date": "2026-05-10",
+            "activity_type": "heart_rate",
+        }
+    ]
 
 
 @pytest.mark.anyio

@@ -97,7 +97,7 @@ The project now has a first working vertical slice:
 - A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
 - A FastAPI assistant backend exposing `/health`, `/chat`, and `/chat/stream`.
 - Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
-- Initial model tool calling with `list_activities`, backed by the local Python `TrainingDataProvider`.
+- Initial model tool calling with `list_activities` and `get_heart_rates`, backed by the local Python `TrainingDataProvider`.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
 - Backend logging for request flow, model calls, tool execution, and stream completion.
 - Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.

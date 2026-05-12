@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any
 
-from services.assistant_api.api.schemas import ChatMessage
+from services.assistant_api.api.schemas import ChatMessage, DataSource
 from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
 
 LOGGER = logging.getLogger(__name__)
@@ -47,17 +47,49 @@ LIST_ACTIVITIES_TOOL: dict[str, Any] = {
     },
 }
 
-AVAILABLE_TOOLS = [LIST_ACTIVITIES_TOOL]
+GET_HEART_RATES_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "get_heart_rates",
+    "description": (
+        "Return Garmin daily heart-rate payloads for an inclusive date range. "
+        "Use this for questions about resting heart rate, daily heart-rate "
+        "patterns, heart-rate trends, or heart-rate values not tied to one "
+        "specific workout."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "begin_date": {
+                "type": "string",
+                "description": "Inclusive start date in YYYY-MM-DD format.",
+            },
+            "end_date": {
+                "type": "string",
+                "description": "Inclusive end date in YYYY-MM-DD format.",
+            },
+        },
+        "required": ["begin_date", "end_date"],
+        "additionalProperties": False,
+    },
+}
+
+AVAILABLE_TOOLS = [LIST_ACTIVITIES_TOOL, GET_HEART_RATES_TOOL]
 
 SYSTEM_PROMPT = """
 You are Garmin AI Coach, a careful training assistant for one athlete.
 
 Use the conversation history and the latest user request to decide whether
-Garmin activity data is needed. When data is needed, call the list_activities
-tool. Extract begin_date and end_date from the user's natural-language request
-in YYYY-MM-DD format. If the user asks for a relative period, infer the range
-from the current date supplied in the latest user message. Include activity_type
-only when the user requests a specific sport.
+Garmin data is needed. Use list_activities for workout lists, activity volume,
+pace, distance, sport-specific summaries, or questions about completed
+activities. Use get_heart_rates for resting heart rate, daily heart-rate
+patterns, heart-rate trends, or heart-rate values not tied to one specific
+workout. You may call both tools when the question needs both workout context
+and daily heart-rate context.
+
+Extract begin_date and end_date from the user's natural-language request in
+YYYY-MM-DD format. If the user asks for a relative period, infer the range from
+the current date supplied in the latest user message. Include activity_type only
+with list_activities and only when the user requests a specific sport.
 
 Do not claim to have seen Garmin data unless it was returned by a tool. Do not
 invent workouts, distances, paces, heart-rate values, or training load. Keep
@@ -117,6 +149,32 @@ def response_output_as_input(response: Any) -> list[dict[str, Any]]:
     return input_items
 
 
+def tool_data_sources(function_calls: list[Any]) -> list[DataSource]:
+    """Build safe frontend data-source descriptions for requested tools."""
+    sources_by_type = {
+        "list_activities": DataSource(
+            type="garmin_activity_range",
+            description="Activities returned by the local training provider.",
+        ),
+        "get_heart_rates": DataSource(
+            type="garmin_heart_rate_range",
+            description="Heart-rate data returned by the local training provider.",
+        ),
+    }
+    data_sources: list[DataSource] = []
+    seen_types: set[str] = set()
+
+    for call in function_calls:
+        tool_name = str(_get_item_value(call, "name"))
+        data_source = sources_by_type.get(tool_name)
+        if data_source is None or data_source.type in seen_types:
+            continue
+        data_sources.append(data_source)
+        seen_types.add(data_source.type)
+
+    return data_sources
+
+
 async def build_tool_outputs(
     *,
     function_calls: list[Any],
@@ -171,6 +229,8 @@ class AssistantToolRunner:
         """
         if tool_name == "list_activities":
             return await self._run_list_activities(arguments)
+        if tool_name == "get_heart_rates":
+            return await self._run_get_heart_rates(arguments)
 
         raise ValueError(f"Unsupported tool requested: {tool_name}")
 
@@ -189,6 +249,20 @@ class AssistantToolRunner:
         )
         LOGGER.info("tool list_activities done activity_count=%d", len(activities))
         return json.dumps({"activities": activities}, default=str)
+
+    async def _run_get_heart_rates(self, arguments: dict[str, Any]) -> str:
+        """Run the Garmin heart-rate range tool."""
+        LOGGER.info(
+            "tool get_heart_rates start begin_date=%s end_date=%s",
+            arguments.get("begin_date"),
+            arguments.get("end_date"),
+        )
+        heart_rates = await self._training_client.get_heart_rates(
+            begin_date=arguments["begin_date"],
+            end_date=arguments["end_date"],
+        )
+        LOGGER.info("tool get_heart_rates done day_count=%d", len(heart_rates))
+        return json.dumps({"heart_rates": heart_rates}, default=str)
 
 
 def parse_tool_arguments(function_call: Any) -> dict[str, Any]:
