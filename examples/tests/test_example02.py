@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -9,7 +9,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from examples import example02
+from services.assistant_api.orchestration.responses_tools import (
+    AssistantToolRunner,
+    build_tool_outputs,
+)
+from services.assistant_api.orchestration.training_data import LocalTrainingDataClient
 
 
 class FakeProvider:  # pylint: disable=too-few-public-methods
@@ -68,9 +75,11 @@ def test_build_user_message_preserves_natural_language_request() -> None:
     assert "2026-05-10" in message
 
 
-def test_build_tool_outputs_uses_model_tool_arguments() -> None:
+@pytest.mark.anyio
+async def test_build_tool_outputs_uses_model_tool_arguments() -> None:
     """Verify that tool execution uses model-extracted tool arguments."""
     provider = FakeProvider()
+    tool_runner = AssistantToolRunner(LocalTrainingDataClient(provider))
     function_call = SimpleNamespace(
         type="function_call",
         name="list_activities",
@@ -81,9 +90,9 @@ def test_build_tool_outputs_uses_model_tool_arguments() -> None:
         ),
     )
 
-    outputs = example02.build_tool_outputs(
+    outputs = await build_tool_outputs(
         function_calls=[function_call],
-        provider=provider,
+        tool_runner=tool_runner,
     )
 
     assert provider.calls == [
@@ -98,9 +107,11 @@ def test_build_tool_outputs_uses_model_tool_arguments() -> None:
     assert "Morning Run" in outputs[0]["output"]
 
 
-def test_build_tool_outputs_returns_error_for_missing_required_dates() -> None:
+@pytest.mark.anyio
+async def test_build_tool_outputs_returns_error_for_missing_required_dates() -> None:
     """Verify that invalid model tool arguments are returned as tool errors."""
     provider = FakeProvider()
+    tool_runner = AssistantToolRunner(LocalTrainingDataClient(provider))
     function_call = SimpleNamespace(
         type="function_call",
         name="list_activities",
@@ -108,9 +119,9 @@ def test_build_tool_outputs_returns_error_for_missing_required_dates() -> None:
         arguments='{"activity_type": "running"}',
     )
 
-    outputs = example02.build_tool_outputs(
+    outputs = await build_tool_outputs(
         function_calls=[function_call],
-        provider=provider,
+        tool_runner=tool_runner,
     )
 
     assert not provider.calls
