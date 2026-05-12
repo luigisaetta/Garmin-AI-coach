@@ -345,6 +345,38 @@ export default function NutritionDiaryDemo() {
             )}
             <span>{planMessage}</span>
           </div>
+          {nutritionPlan ? (
+            <div className="planSummary">
+              <strong>{nutritionPlan.original_filename}</strong>
+              <span>
+                {nutritionPlan.extracted_text.length.toLocaleString("en-US")} extracted
+                characters
+              </span>
+            </div>
+          ) : null}
+          <form className="sidebarUploadForm" onSubmit={handlePlanUpload}>
+            <label className="sidebarFileField">
+              <span>PDF file</span>
+              <input
+                accept="application/pdf"
+                type="file"
+                onChange={(event) => {
+                  setSelectedPlanFile(event.target.files?.[0] ?? null);
+                  setPlanMessage("Ready to upload selected PDF");
+                  setPlanState(nutritionPlan ? "ready" : "missing");
+                }}
+              />
+            </label>
+
+            <button
+              className="sidebarAction"
+              disabled={!selectedPlanFile || planState === "uploading"}
+              type="submit"
+            >
+              <UploadCloud size={16} />
+              <span>{nutritionPlan ? "Replace plan" : "Upload plan"}</span>
+            </button>
+          </form>
         </section>
 
         <section className="panel">
@@ -389,46 +421,6 @@ export default function NutritionDiaryDemo() {
 
         <div className="diaryGrid">
           <div className="diaryForm">
-            <section className="diaryPanel">
-              <div className="diaryPanelHeader">
-                <span className="diaryIcon" aria-hidden="true">
-                  <UploadCloud size={18} />
-                </span>
-                <span>
-                  <h3>Nutrition plan</h3>
-                  <p>
-                    {nutritionPlan
-                      ? `${nutritionPlan.original_filename} is the current plan`
-                      : "Upload one PDF plan; a new upload replaces the current one"}
-                  </p>
-                </span>
-              </div>
-
-              <form className="planUploadForm" onSubmit={handlePlanUpload}>
-                <label className="field">
-                  <span>PDF file</span>
-                  <input
-                    accept="application/pdf"
-                    type="file"
-                    onChange={(event) => {
-                      setSelectedPlanFile(event.target.files?.[0] ?? null);
-                      setPlanMessage("Ready to upload selected PDF");
-                      setPlanState(nutritionPlan ? "ready" : "missing");
-                    }}
-                  />
-                </label>
-
-                <button
-                  className="primaryAction"
-                  disabled={!selectedPlanFile || planState === "uploading"}
-                  type="submit"
-                >
-                  <UploadCloud size={17} />
-                  <span>{nutritionPlan ? "Replace plan" : "Upload plan"}</span>
-                </button>
-              </form>
-            </section>
-
             <section className="diaryPanel">
               <div className="diaryPanelHeader">
                 <span className="diaryIcon" aria-hidden="true">
