@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -26,13 +26,19 @@ def disable_dotenv_loading(monkeypatch: pytest.MonkeyPatch) -> None:
 class FakeGarminClient:
     """Fake Garmin Connect client used to test provider behavior."""
 
-    def __init__(self, activities: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        activities: list[dict[str, Any]] | None = None,
+        heart_rates_by_date: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """Initialize the fake client with optional activity payloads."""
         self.calls: list[dict[str, str]] = []
+        self.heart_rate_calls: list[str] = []
         self.login_tokenstores: list[str | None] = []
         self.activities = activities or [
             {"activityId": 123, "activityName": "Morning Run"}
         ]
+        self.heart_rates_by_date = heart_rates_by_date or {}
 
     def login(self, tokenstore: str | None = None) -> tuple[str | None, str | None]:
         """Simulate Garmin Connect login without doing network I/O."""
@@ -51,6 +57,18 @@ class FakeGarminClient:
             }
         )
         return self.activities
+
+    def get_heart_rates(self, cdate: str) -> dict[str, Any]:
+        """Record the daily heart-rate request and return a payload."""
+        self.heart_rate_calls.append(cdate)
+        return self.heart_rates_by_date.get(
+            cdate,
+            {
+                "calendarDate": cdate,
+                "restingHeartRate": 48,
+                "heartRateValues": [[0, 52], [60, 58]],
+            },
+        )
 
 
 def test_list_activities_returns_all_activity_types_by_default() -> None:
@@ -104,6 +122,57 @@ def test_list_activities_rejects_invalid_date_format() -> None:
 
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         provider.list_activities("05/01/2026", "2026-05-10")
+
+
+def test_get_heart_rates_returns_daily_payloads_for_inclusive_range() -> None:
+    """Verify that heart-rate range queries call Garmin once per day."""
+    client = FakeGarminClient(
+        heart_rates_by_date={
+            "2026-05-01": {"calendarDate": "2026-05-01", "restingHeartRate": 48},
+            "2026-05-02": {"calendarDate": "2026-05-02", "restingHeartRate": 47},
+        }
+    )
+    provider = TrainingDataProvider(client=client)
+
+    heart_rates = provider.get_heart_rates("2026-05-01", "2026-05-02")
+
+    assert client.heart_rate_calls == ["2026-05-01", "2026-05-02"]
+    assert heart_rates == {
+        "2026-05-01": {"calendarDate": "2026-05-01", "restingHeartRate": 48},
+        "2026-05-02": {"calendarDate": "2026-05-02", "restingHeartRate": 47},
+    }
+
+
+def test_get_heart_rates_rejects_invalid_date_range() -> None:
+    """Verify that heart-rate queries reject ranges with a start after the end."""
+    provider = TrainingDataProvider(client=FakeGarminClient())
+
+    with pytest.raises(ValueError, match="begin_date"):
+        provider.get_heart_rates("2026-05-10", "2026-05-01")
+
+
+def test_get_heart_rates_masks_pii_fields_from_daily_payloads() -> None:
+    """Verify that raw heart-rate payload shape still receives PII masking."""
+    client = FakeGarminClient(
+        heart_rates_by_date={
+            "2026-05-01": {
+                "calendarDate": "2026-05-01",
+                "restingHeartRate": 48,
+                "ownerDisplayName": "luigisaetta",
+            }
+        }
+    )
+    provider = TrainingDataProvider(client=client)
+
+    heart_rates = provider.get_heart_rates("2026-05-01", "2026-05-01")
+
+    assert heart_rates == {
+        "2026-05-01": {
+            "calendarDate": "2026-05-01",
+            "restingHeartRate": 48,
+            "ownerDisplayName": "*****",
+        }
+    }
 
 
 def test_list_activities_masks_pii_fields_from_activity_payloads() -> None:

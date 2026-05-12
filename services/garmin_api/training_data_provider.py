@@ -1,12 +1,12 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import os
 from pathlib import Path
 from typing import Any, Protocol
@@ -56,6 +56,9 @@ class GarminConnectClient(Protocol):
         self, startdate: str, enddate: str, activitytype: str = ""
     ) -> list[dict[str, Any]]:
         """Return Garmin Connect activities for a date range."""
+
+    def get_heart_rates(self, cdate: str) -> dict[str, Any]:
+        """Return Garmin Connect heart-rate data for one date."""
 
 
 class TrainingDataProvider:  # pylint: disable=too-few-public-methods
@@ -160,6 +163,50 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             activitytype=garmin_activity_type,
         )
         return [self._sanitize_activity(activity) for activity in activities]
+
+    def get_heart_rates(
+        self,
+        begin_date: date | str,
+        end_date: date | str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return Garmin heart-rate payloads for each day in a date range.
+
+        Garmin Connect exposes heart-rate data as a per-day endpoint. This
+        provider method preserves that raw Garmin payload shape and keys the
+        responses by ISO date so callers can request an inclusive interval while
+        still inspecting the original daily data returned by `garminconnect`.
+
+        Args:
+            begin_date: Inclusive start date for the query. Accepts either a
+                `datetime.date` instance or an ISO `YYYY-MM-DD` string.
+            end_date: Inclusive end date for the query. Accepts either a
+                `datetime.date` instance or an ISO `YYYY-MM-DD` string.
+
+        Returns:
+            A dictionary keyed by ISO date. Each value is the corresponding
+            Garmin Connect heart-rate dictionary for that day, preserving the
+            raw provider shape apart from configured PII redaction.
+
+        Raises:
+            ValueError: If either date cannot be parsed as an ISO date or if
+                `begin_date` is after `end_date`.
+        """
+        start = self._coerce_date(begin_date, field_name="begin_date")
+        end = self._coerce_date(end_date, field_name="end_date")
+
+        if start > end:
+            raise ValueError("begin_date must be earlier than or equal to end_date.")
+
+        heart_rates: dict[str, dict[str, Any]] = {}
+        current = start
+        while current <= end:
+            current_date = current.isoformat()
+            heart_rates[current_date] = self._sanitize_activity(
+                self._client.get_heart_rates(current_date)
+            )
+            current += timedelta(days=1)
+
+        return heart_rates
 
     @staticmethod
     def _build_client(

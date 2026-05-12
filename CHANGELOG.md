@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-12
+
+### Added
+
+- Added `TrainingDataProvider.get_heart_rates(begin_date, end_date)` for inclusive Garmin heart-rate range access through the local provider boundary.
+- Added `examples/example03.py` to print raw Garmin heart-rate payloads for a date range.
+- Added mocked provider tests for heart-rate range calls, date validation, and PII masking.
+
+### Changed
+
+- Updated the project specification to include the heart-rate provider method while preserving the current Garmin provider boundary.
+
+### Verified
+
+- Python tests, formatting, and linting pass for backend services and examples.
+
 ## 2026-05-11
 
 ### Added

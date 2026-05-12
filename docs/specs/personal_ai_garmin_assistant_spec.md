@@ -191,6 +191,9 @@ class TrainingDataProvider:
     def get_activity_streams(...):
         ...
 
+    def get_heart_rates(...):
+        ...
+
     def get_daily_metrics(...):
         ...
 ```
@@ -505,6 +508,7 @@ Deliver:
 * Activity list provider method
 * Activity detail provider method
 * Activity streams provider method, if needed by the first assistant workflows
+* Heart-rate range provider method, preserving Garmin daily payload shape
 * Daily metrics provider method, if needed by the first assistant workflows
 * Normalised response schemas
 * Tests with mocked Garmin data
