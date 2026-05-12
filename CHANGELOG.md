@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a frontend navigation menu for moving between the coaching chat and the nutrition diary demo page.
+- Added an early food diary demo UI with date selection, training type selection, free-text meal descriptions, notes, and a local draft preview.
 - Added `TrainingDataProvider.get_heart_rates(begin_date, end_date)` for inclusive Garmin heart-rate range access through the local provider boundary.
 - Added the Responses API `get_heart_rates` assistant tool backed by the local provider boundary.
 - Added `examples/example03.py` to print raw Garmin heart-rate payloads for a date range.
@@ -16,6 +18,7 @@
 
 ### Verified
 
+- Frontend linting and production build pass for the nutrition diary UI.
 - Python tests, formatting, and linting pass for backend services and examples.
 
 ## 2026-05-11
