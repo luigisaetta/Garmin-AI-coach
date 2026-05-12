@@ -281,7 +281,9 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
 @pytest.mark.anyio
 async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
     """Verify chat can expose and execute the nutrition subagent as a tool."""
-    inference_client = FakeInferenceClient(tool_name="analyze_nutrition_adherence_week")
+    inference_client = FakeInferenceClient(
+        tool_name="analyze_nutrition_adherence_period"
+    )
     training_client = FakeTrainingClient()
     nutrition_agent = FakeNutritionAnalysisAgent()
     orchestrator = AssistantOrchestrator(
@@ -302,7 +304,7 @@ async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
             "end_date": date(2026, 5, 10),
         }
     ]
-    assert "analyze_nutrition_adherence_week" in {
+    assert "analyze_nutrition_adherence_period" in {
         tool["name"] for tool in inference_client.responses.calls[0]["tools"]
     }
 

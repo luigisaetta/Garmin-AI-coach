@@ -76,7 +76,7 @@ GET_HEART_RATES_TOOL: dict[str, Any] = {
 
 ANALYZE_NUTRITION_ADHERENCE_TOOL: dict[str, Any] = {
     "type": "function",
-    "name": "analyze_nutrition_adherence_week",
+    "name": "analyze_nutrition_adherence_period",
     "description": (
         "Run the nutrition analysis subagent for an inclusive date range. "
         "Use this when the user asks to analyze nutrition adherence, compare "
@@ -167,7 +167,7 @@ def tool_data_sources(function_calls: list[Any]) -> list[DataSource]:
             type="garmin_heart_rate_range",
             description="Heart-rate data returned by the local training provider.",
         ),
-        "analyze_nutrition_adherence_week": DataSource(
+        "analyze_nutrition_adherence_period": DataSource(
             type="nutrition_adherence_analysis",
             description=(
                 "Nutrition analysis produced by the local nutrition subagent "
@@ -252,7 +252,7 @@ class AssistantToolRunner:
             return await self._run_list_activities(arguments)
         if tool_name == "get_heart_rates":
             return await self._run_get_heart_rates(arguments)
-        if tool_name == "analyze_nutrition_adherence_week":
+        if tool_name == "analyze_nutrition_adherence_period":
             return await self._run_analyze_nutrition_adherence(arguments)
 
         raise ValueError(f"Unsupported tool requested: {tool_name}")
@@ -298,7 +298,7 @@ class AssistantToolRunner:
         begin_date = date.fromisoformat(arguments["begin_date"])
         end_date = date.fromisoformat(arguments["end_date"])
         LOGGER.info(
-            "tool analyze_nutrition_adherence_week start begin_date=%s end_date=%s",
+            "tool analyze_nutrition_adherence_period start begin_date=%s end_date=%s",
             begin_date,
             end_date,
         )
@@ -307,7 +307,7 @@ class AssistantToolRunner:
             end_date=end_date,
         )
         LOGGER.info(
-            "tool analyze_nutrition_adherence_week done diary_entries=%d "
+            "tool analyze_nutrition_adherence_period done diary_entries=%d "
             "missing_days=%d training_days=%d",
             result.diary_entry_count,
             len(result.missing_diary_dates),

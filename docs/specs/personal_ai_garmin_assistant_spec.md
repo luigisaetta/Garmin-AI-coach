@@ -474,9 +474,9 @@ Initial nutrition tool capabilities may include:
 
 * `get_current_nutrition_plan`
 * `list_food_diary_entries`
-* `analyze_nutrition_adherence_week`
+* `analyze_nutrition_adherence_period`
 
-The `analyze_nutrition_adherence_week` tool should accept `begin_date` and
+The `analyze_nutrition_adherence_period` tool should accept `begin_date` and
 `end_date` in `YYYY-MM-DD` format and may be used for any inclusive requested
 period, including but not limited to one calendar week. The tool runs the
 nutrition analysis subagent inside the assistant backend and returns the

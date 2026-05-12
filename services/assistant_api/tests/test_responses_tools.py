@@ -125,7 +125,7 @@ def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
 
     assert tool_names == {"list_activities", "get_heart_rates"}
     assert "get_heart_rates" in SYSTEM_PROMPT
-    assert "analyze_nutrition_adherence_week" in SYSTEM_PROMPT
+    assert "analyze_nutrition_adherence_period" in SYSTEM_PROMPT
 
 
 def test_tool_definitions_include_nutrition_tool_when_subagent_exists() -> None:
@@ -137,7 +137,7 @@ def test_tool_definitions_include_nutrition_tool_when_subagent_exists() -> None:
 
     tool_names = {tool["name"] for tool in runner.tool_definitions()}
 
-    assert "analyze_nutrition_adherence_week" in tool_names
+    assert "analyze_nutrition_adherence_period" in tool_names
 
 
 def test_build_model_input_includes_history_and_latest_request() -> None:
@@ -239,7 +239,7 @@ async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
     nutrition_agent = FakeNutritionAnalysisAgent()
     function_call = SimpleNamespace(
         type="function_call",
-        name="analyze_nutrition_adherence_week",
+        name="analyze_nutrition_adherence_period",
         call_id="call_nutrition",
         arguments='{"begin_date": "2026-05-04", "end_date": "2026-05-10"}',
     )
@@ -310,7 +310,9 @@ def test_tool_data_sources_describe_unique_requested_tools() -> None:
     function_calls = [
         SimpleNamespace(type="function_call", name="list_activities"),
         SimpleNamespace(type="function_call", name="get_heart_rates"),
-        SimpleNamespace(type="function_call", name="analyze_nutrition_adherence_week"),
+        SimpleNamespace(
+            type="function_call", name="analyze_nutrition_adherence_period"
+        ),
         SimpleNamespace(type="function_call", name="get_heart_rates"),
     ]
 
