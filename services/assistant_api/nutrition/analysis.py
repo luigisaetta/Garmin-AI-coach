@@ -43,15 +43,19 @@ Important safety and scope rules:
   uncertain instead of inventing numbers.
 - Highlight useful points to discuss with the nutritionist.
 
-Return a detailed report in Italian with these sections:
-1. Sintesi del periodo
-2. Copertura del diario e dati mancanti
-3. Allenamenti del periodo
-4. Confronto con il piano alimentare
-5. Macronutrienti e volume calorico
-6. Punti di attenzione
-7. Cose da migliorare
-8. Domande da portare al nutrizionista
+Write the report in the response_language provided in the input payload. If no
+response_language is provided, use the same language as the user's request when
+it is clear; expected languages are Italian or English.
+
+Return a detailed report with these sections:
+1. Period summary
+2. Diary coverage and missing data
+3. Training during the period
+4. Comparison with the nutrition plan
+5. Macronutrients and calorie volume
+6. Points of attention
+7. Improvement opportunities
+8. Questions to bring to the nutritionist
 """.strip()
 
 
@@ -87,6 +91,7 @@ class NutritionAnalysisContext:
 
     begin_date: date
     end_date: date
+    response_language: str | None = None
     plan: NutritionPlan | None = None
     diary_entries: list[NutritionDiaryEntry] = field(default_factory=list)
     missing_diary_dates: list[date] = field(default_factory=list)
@@ -274,17 +279,24 @@ class NutritionAnalysisSubAgent:
         *,
         begin_date: date,
         end_date: date,
+        response_language: str | None = None,
     ) -> NutritionAnalysisResult:
         """Run every graph step and return the completed report."""
         if begin_date > end_date:
             raise ValueError("begin_date must be before or equal to end_date")
+        if response_language not in {None, "italian", "english"}:
+            raise ValueError("response_language must be 'italian' or 'english'")
 
         LOGGER.info(
             "nutrition analysis graph start begin_date=%s end_date=%s",
             begin_date,
             end_date,
         )
-        context = NutritionAnalysisContext(begin_date=begin_date, end_date=end_date)
+        context = NutritionAnalysisContext(
+            begin_date=begin_date,
+            end_date=end_date,
+            response_language=response_language,
+        )
         for step in self._steps:
             context = await step.run(context)
 
@@ -316,6 +328,7 @@ def build_nutrition_report_payload(
             "begin_date": context.begin_date.isoformat(),
             "end_date": context.end_date.isoformat(),
         },
+        "response_language": context.response_language,
         "current_plan": {
             "original_filename": context.plan.original_filename,
             "uploaded_at": context.plan.uploaded_at.isoformat(),

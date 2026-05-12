@@ -103,9 +103,16 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
         *,
         begin_date: date,
         end_date: date,
+        response_language: str | None = None,
     ) -> NutritionAnalysisResult:
         """Capture the requested period and return a deterministic report."""
-        self.calls.append({"begin_date": begin_date, "end_date": end_date})
+        self.calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "response_language": response_language,
+            }
+        )
         return NutritionAnalysisResult(
             begin_date=begin_date,
             end_date=end_date,
@@ -241,7 +248,10 @@ async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
         type="function_call",
         name="analyze_nutrition_adherence_period",
         call_id="call_nutrition",
-        arguments='{"begin_date": "2026-05-04", "end_date": "2026-05-10"}',
+        arguments=(
+            '{"begin_date": "2026-05-04", "end_date": "2026-05-10", '
+            '"response_language": "english"}'
+        ),
     )
 
     outputs = await responses_tools.build_tool_outputs(
@@ -256,6 +266,7 @@ async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
         {
             "begin_date": date(2026, 5, 4),
             "end_date": date(2026, 5, 10),
+            "response_language": "english",
         }
     ]
     assert outputs[0]["type"] == "function_call_output"

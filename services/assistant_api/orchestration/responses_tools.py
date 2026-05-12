@@ -68,8 +68,17 @@ GET_HEART_RATES_TOOL: dict[str, Any] = {
                 "type": "string",
                 "description": "Inclusive end date in YYYY-MM-DD format.",
             },
+            "response_language": {
+                "type": "string",
+                "enum": ["italian", "english"],
+                "description": (
+                    "Language for the nutrition report. Choose italian when "
+                    "the latest user request is in Italian, and english when "
+                    "the latest user request is in English."
+                ),
+            },
         },
-        "required": ["begin_date", "end_date"],
+        "required": ["begin_date", "end_date", "response_language"],
         "additionalProperties": False,
     },
 }
@@ -305,6 +314,7 @@ class AssistantToolRunner:
         result = await self._nutrition_analysis_agent.analyze(
             begin_date=begin_date,
             end_date=end_date,
+            response_language=arguments.get("response_language"),
         )
         LOGGER.info(
             "tool analyze_nutrition_adherence_period done diary_entries=%d "

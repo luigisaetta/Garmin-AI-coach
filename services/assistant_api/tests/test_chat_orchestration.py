@@ -47,7 +47,9 @@ class FakeResponses:  # pylint: disable=too-few-public-methods
                         name=self.tool_name,
                         call_id="call_123",
                         arguments=(
-                            '{"begin_date": "2026-05-04", ' '"end_date": "2026-05-10"}'
+                            '{"begin_date": "2026-05-04", '
+                            '"end_date": "2026-05-10", '
+                            '"response_language": "italian"}'
                         ),
                         model_dump=lambda **_: {
                             "type": "function_call",
@@ -55,7 +57,8 @@ class FakeResponses:  # pylint: disable=too-few-public-methods
                             "call_id": "call_123",
                             "arguments": (
                                 '{"begin_date": "2026-05-04", '
-                                '"end_date": "2026-05-10"}'
+                                '"end_date": "2026-05-10", '
+                                '"response_language": "italian"}'
                             ),
                         },
                     )
@@ -197,9 +200,16 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
         *,
         begin_date: date,
         end_date: date,
+        response_language: str | None = None,
     ) -> NutritionAnalysisResult:
         """Capture the requested period and return a deterministic report."""
-        self.calls.append({"begin_date": begin_date, "end_date": end_date})
+        self.calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "response_language": response_language,
+            }
+        )
         return NutritionAnalysisResult(
             begin_date=begin_date,
             end_date=end_date,
@@ -302,6 +312,7 @@ async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
         {
             "begin_date": date(2026, 5, 4),
             "end_date": date(2026, 5, 10),
+            "response_language": "italian",
         }
     ]
     assert "analyze_nutrition_adherence_period" in {

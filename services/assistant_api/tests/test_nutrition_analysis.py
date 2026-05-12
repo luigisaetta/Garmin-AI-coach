@@ -179,6 +179,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
     result = await subagent.analyze(
         begin_date=date(2026, 5, 12),
         end_date=date(2026, 5, 13),
+        response_language="italian",
     )
 
     assert result.report == "Report nutrizionale dettagliato."
@@ -204,5 +205,13 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
         "begin_date": "2026-05-12",
         "end_date": "2026-05-13",
     }
+    assert payload["response_language"] == "italian"
     assert payload["missing_diary_dates"] == ["2026-05-13"]
     assert payload["training_summaries"][0]["combined_workout"] is True
+
+
+def test_nutrition_analysis_prompt_does_not_force_italian() -> None:
+    """Verify the nutrition subagent prompt keeps language selection flexible."""
+    assert "Return a detailed report in Italian" not in NUTRITION_ANALYSIS_PROMPT
+    assert "response_language" in NUTRITION_ANALYSIS_PROMPT
+    assert "Period summary" in NUTRITION_ANALYSIS_PROMPT
