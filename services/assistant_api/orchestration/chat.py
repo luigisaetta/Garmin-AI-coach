@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -18,6 +18,7 @@ from services.assistant_api.api.schemas import (
     ChatRequest,
     ChatResponse,
     ChatStreamEvent,
+    TokenUsage,
 )
 from services.assistant_api.orchestration.responses_tools import (
     AssistantToolRunner,
@@ -93,6 +94,7 @@ class AssistantOrchestrator:
             return ChatResponse(
                 answer=initial_response.output_text,
                 conversation_id=conversation_id,
+                token_usage=response_token_usage(initial_response),
             )
 
         LOGGER.info("tool execution start conversation_id=%s", conversation_id)
@@ -121,6 +123,10 @@ class AssistantOrchestrator:
                     description="Activities returned by the local training provider.",
                 )
             ],
+            token_usage=combine_token_usage(
+                response_token_usage(initial_response),
+                response_token_usage(final_response),
+            ),
         )
 
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
@@ -192,6 +198,10 @@ class AssistantOrchestrator:
             conversation_id=conversation_id,
             answer=answer,
             data_sources=data_sources,
+            token_usage=combine_token_usage(
+                response_token_usage(initial_response),
+                response_token_usage(final_response),
+            ),
         )
 
     async def _build_final_stream_input(
@@ -251,3 +261,43 @@ def _get_event_value(event: Any, key: str) -> Any:
     if isinstance(event, dict):
         return event.get(key)
     return getattr(event, key, None)
+
+
+def combine_token_usage(*items: TokenUsage | None) -> TokenUsage | None:
+    """Add token usage values from multiple Responses API calls."""
+    present_items = [item for item in items if item is not None]
+    if not present_items:
+        return None
+
+    return TokenUsage(
+        input_tokens=sum(item.input_tokens for item in present_items),
+        output_tokens=sum(item.output_tokens for item in present_items),
+        total_tokens=sum(item.total_tokens for item in present_items),
+    )
+
+
+def response_token_usage(response: Any) -> TokenUsage | None:
+    """Extract token usage from an SDK response object or plain dictionary."""
+    usage = _get_event_value(response, "usage")
+    if usage is None:
+        return None
+
+    input_tokens = _get_int_value(usage, "input_tokens")
+    output_tokens = _get_int_value(usage, "output_tokens")
+    total_tokens = _get_int_value(usage, "total_tokens")
+    if total_tokens == 0:
+        total_tokens = input_tokens + output_tokens
+
+    return TokenUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+    )
+
+
+def _get_int_value(item: Any, key: str) -> int:
+    """Read an integer value from an SDK object or plain dictionary."""
+    value = _get_event_value(item, key)
+    if value is None:
+        return 0
+    return int(value)

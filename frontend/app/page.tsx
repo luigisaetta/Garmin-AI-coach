@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-11
+ * Last modified: 2026-05-12
  * License: MIT
  */
 
@@ -12,6 +12,7 @@ import {
   Bot,
   CheckCircle2,
   CircleAlert,
+  Hash,
   Moon,
   RotateCcw,
   Send,
@@ -36,11 +37,18 @@ type ChatMessage = {
   content: string;
 };
 
+type TokenUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+};
+
 type AssistantStreamEvent = {
   type: "message_delta" | "message_done" | "error";
   conversation_id: string;
   delta?: string;
   answer?: string;
+  token_usage?: TokenUsage;
 };
 
 const QUICK_PROMPTS = [
@@ -58,6 +66,10 @@ const SAMPLE_METRICS = [
 
 function createId() {
   return crypto.randomUUID();
+}
+
+function formatTokenCount(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function parseSseBlock(block: string) {
@@ -89,6 +101,11 @@ export default function CoachChat() {
   const [serviceState, setServiceState] = useState<ServiceState>("checking");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>({
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  });
   const abortControllerRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -139,6 +156,11 @@ export default function CoachChat() {
     setInput("");
     setError(null);
     setIsStreaming(false);
+    setTokenUsage({
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+    });
     setMessages([
       {
         id: createId(),
@@ -147,6 +169,18 @@ export default function CoachChat() {
           "Ask me about recent load, workout quality, pacing, heart-rate drift, or recovery signals.",
       },
     ]);
+  }
+
+  function addTokenUsage(nextUsage?: TokenUsage) {
+    if (!nextUsage) {
+      return;
+    }
+
+    setTokenUsage((current) => ({
+      input_tokens: current.input_tokens + nextUsage.input_tokens,
+      output_tokens: current.output_tokens + nextUsage.output_tokens,
+      total_tokens: current.total_tokens + nextUsage.total_tokens,
+    }));
   }
 
   async function sendMessage(nextMessage?: string) {
@@ -245,7 +279,26 @@ export default function CoachChat() {
             );
           }
 
-          if (event.type === "message_done" && event.answer) {
+          if (event.type === "message_done") {
+            addTokenUsage(event.token_usage);
+            if (event.answer) {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantMessage.id
+                    ? { ...message, content: event.answer ?? message.content }
+                    : message,
+                ),
+              );
+            }
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const event = parseSseBlock(buffer);
+        if (event?.type === "message_done") {
+          addTokenUsage(event.token_usage);
+          if (event.answer) {
             setMessages((current) =>
               current.map((message) =>
                 message.id === assistantMessage.id
@@ -254,19 +307,6 @@ export default function CoachChat() {
               ),
             );
           }
-        }
-      }
-
-      if (buffer.trim()) {
-        const event = parseSseBlock(buffer);
-        if (event?.type === "message_done" && event.answer) {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessage.id
-                ? { ...message, content: event.answer ?? message.content }
-                : message,
-            ),
-          );
         }
       }
     } catch (caughtError) {
@@ -334,6 +374,27 @@ export default function CoachChat() {
                 <strong>{metric.value}</strong>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panelTitle">
+            <Hash size={17} />
+            <h2>Tokens</h2>
+          </div>
+          <div className="miniGrid">
+            <div className="metric teal">
+              <small>Input</small>
+              <strong>{formatTokenCount(tokenUsage.input_tokens)}</strong>
+            </div>
+            <div className="metric coral">
+              <small>Output</small>
+              <strong>{formatTokenCount(tokenUsage.output_tokens)}</strong>
+            </div>
+            <div className="metric gold">
+              <small>Total</small>
+              <strong>{formatTokenCount(tokenUsage.total_tokens)}</strong>
+            </div>
           </div>
         </section>
 

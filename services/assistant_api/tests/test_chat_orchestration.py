@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -33,6 +33,11 @@ class FakeResponses:  # pylint: disable=too-few-public-methods
         if len(self.calls) == 1:
             return SimpleNamespace(
                 output_text="",
+                usage=SimpleNamespace(
+                    input_tokens=100,
+                    output_tokens=12,
+                    total_tokens=112,
+                ),
                 output=[
                     SimpleNamespace(
                         type="function_call",
@@ -53,7 +58,15 @@ class FakeResponses:  # pylint: disable=too-few-public-methods
                     )
                 ],
             )
-        return SimpleNamespace(output_text="You ran three times last week.", output=[])
+        return SimpleNamespace(
+            output_text="You ran three times last week.",
+            usage=SimpleNamespace(
+                input_tokens=140,
+                output_tokens=28,
+                total_tokens=168,
+            ),
+            output=[],
+        )
 
     def stream(self, **kwargs: Any) -> "FakeStreamManager":
         """Capture streaming model requests and return a fake stream manager."""
@@ -110,7 +123,14 @@ class FakeStream:
 
     def get_final_response(self) -> SimpleNamespace:
         """Return a fake accumulated final response."""
-        return SimpleNamespace(output_text=self._final_text)
+        return SimpleNamespace(
+            output_text=self._final_text,
+            usage=SimpleNamespace(
+                input_tokens=120,
+                output_tokens=24,
+                total_tokens=144,
+            ),
+        )
 
 
 class FakeInferenceClient:  # pylint: disable=too-few-public-methods
@@ -170,6 +190,10 @@ async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
     assert response.answer == "You ran three times last week."
     assert response.conversation_id == "conversation-1"
     assert response.data_sources[0].type == "garmin_activity_range"
+    assert response.token_usage is not None
+    assert response.token_usage.input_tokens == 240
+    assert response.token_usage.output_tokens == 40
+    assert response.token_usage.total_tokens == 280
     assert training_client.calls == [
         {
             "begin_date": "2026-05-04",
@@ -212,4 +236,8 @@ async def test_stream_chat_uses_responses_api_stream_for_final_answer() -> None:
     assert events[0].delta == "You ran "
     assert events[1].delta == "three times."
     assert events[2].answer == "You ran three times."
+    assert events[2].token_usage is not None
+    assert events[2].token_usage.input_tokens == 220
+    assert events[2].token_usage.output_tokens == 36
+    assert events[2].token_usage.total_tokens == 256
     assert inference_client.responses.calls[-1]["stream"] is True

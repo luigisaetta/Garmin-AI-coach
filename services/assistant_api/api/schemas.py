@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -35,12 +35,21 @@ class DataSource(BaseModel):
     description: str
 
 
+class TokenUsage(BaseModel):
+    """Token usage returned by Responses API calls for one assistant turn."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
 class ChatResponse(BaseModel):
     """Non-streaming representation of a completed assistant answer."""
 
     answer: str
     conversation_id: str
     data_sources: list[DataSource] = Field(default_factory=list)
+    token_usage: TokenUsage | None = None
 
 
 class ChatStreamEvent(BaseModel):
@@ -51,6 +60,7 @@ class ChatStreamEvent(BaseModel):
     delta: str | None = None
     answer: str | None = None
     data_sources: list[DataSource] = Field(default_factory=list)
+    token_usage: TokenUsage | None = None
 
 
 class HealthResponse(BaseModel):

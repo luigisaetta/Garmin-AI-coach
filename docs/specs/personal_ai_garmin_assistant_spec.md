@@ -90,6 +90,7 @@ The frontend is responsible for:
 * Rendering the assistant chat interface
 * Sending user messages to the assistant backend
 * Displaying responses, errors, loading states, and basic activity summaries
+* Displaying assistant-reported token usage counters for the current chat
 * Keeping browser side logic simple
 
 The frontend must not:
@@ -109,6 +110,7 @@ The assistant backend is responsible for:
 * Constructing model requests using the Responses API
 * Calling OCI Enterprise AI with model `openai.gpt-5.4`
 * Returning grounded answers to the frontend
+* Returning Responses API token usage summaries when available
 * Handling assistant level errors and response shaping
 
 The assistant backend must not:
