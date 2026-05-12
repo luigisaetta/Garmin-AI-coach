@@ -73,16 +73,17 @@ The Garmin data access layer is the only code path that knows Garmin Connect imp
 
 The project does not currently expose a separate Garmin HTTP API container. That remains a future architectural option if the specification is updated first.
 
-### Nutrition diary UI
+### Nutrition diary persistence
 
-The frontend also includes an early nutrition diary demo page for the planned
+The frontend also includes an early nutrition diary page for the planned
 nutrition adherence extension. The page lets the user select a diary date,
-choose the training context for the day, and describe meals and notes in free
-text.
+choose the training context for the day, describe meals and notes in free text,
+and save or update the selected day.
 
-This is currently a frontend-only workflow. It does not persist food diary
-entries, call backend nutrition services, parse nutrition plans, or perform
-adherence analysis yet.
+The assistant backend persists diary entries in a local SQLite database through
+a dedicated nutrition service. Docker Compose mounts the database directory on
+the `assistant-data` volume so entries survive container stop and restart. The
+current MVP does not parse nutrition plans or perform adherence analysis yet.
 
 ## Guiding Principles
 
@@ -100,23 +101,24 @@ adherence analysis yet.
 3. Assistant backend foundation with a chat endpoint, local training provider tools, simple date range inference, and OCI Enterprise AI integration.
 4. Frontend chat flow with input, responses, loading states, and error states.
 5. Local deployment hardening with environment variables, health checks, and operating documentation.
-6. Nutrition diary UI foundation with navigation from the chat page, date selection, training context selection, free-text meal notes, and local draft preview.
+6. Nutrition diary MVP with navigation from the chat page, date selection, training context selection, free-text meal notes, local draft preview, and SQLite-backed persistence for one day at a time.
 
 ## Project Status
 
 The project now has a first working vertical slice:
 
 - A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
-- A frontend navigation menu linking the coaching chat and an early food diary demo page.
-- A nutrition diary demo UI with date selection, training type selection, meal descriptions, notes, and a local draft preview.
-- A FastAPI assistant backend exposing `/health`, `/chat`, and `/chat/stream`.
+- A frontend navigation menu linking the coaching chat and the food diary page.
+- A nutrition diary UI with date selection, training type selection, meal descriptions, notes, local draft preview, and save/update flows.
+- A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, and nutrition diary endpoints.
+- SQLite-backed nutrition diary persistence through a dedicated backend service.
 - Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
 - Initial model tool calling with `list_activities` and `get_heart_rates`, backed by the local Python `TrainingDataProvider`.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
 - Backend logging for request flow, model calls, tool execution, and stream completion.
 - Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.
 
-The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data. The nutrition diary page is UI-only and does not store entries until the backend persistence workflow is added.
+The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data. The nutrition diary MVP stores daily entries locally, but period reads, nutrition-plan uploads, and adherence analysis are still future work.
 
 ## Local Docker Runtime
 
@@ -129,6 +131,13 @@ docker compose up --build
 The frontend is exposed at `http://localhost:3000`. The assistant backend is exposed at `http://localhost:8000` for local debugging and is reached by the frontend inside Docker through `http://assistant_api:8000`.
 
 If one of those host ports is already in use, override `FRONTEND_PORT` or `ASSISTANT_API_PORT` in `.env`.
+
+Nutrition diary entries are stored in SQLite at `NUTRITION_DB_PATH`. Docker
+Compose defaults this to `/data/garmin_ai_coach.db` inside the assistant API
+container and persists `/data` through the `assistant-data` named volume. The
+database survives `docker compose stop`, `docker compose restart`, and
+`docker compose down`; it is removed only if volumes are explicitly deleted,
+for example with `docker compose down -v`.
 
 ### Runtime Configuration
 
@@ -145,6 +154,7 @@ files.
 | `GENAI_API_KEY` | Yes for model calls | `assistant_api`, examples | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `NUTRITION_DB_PATH` | No | `assistant_api` | SQLite database path for nutrition diary persistence. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
 | `ASSISTANT_API_URL` | Yes for local frontend development | frontend route handlers | Backend URL used by the Next.js server when running outside Docker, usually `http://localhost:8000`. Docker Compose sets this internally to `http://assistant_api:8000`. |
 | `NEXT_PUBLIC_ASSISTANT_API_URL` | No | frontend route handlers | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets this internally to `http://assistant_api:8000`. |
 | `ASSISTANT_API_PORT` | No | Docker Compose | Host port mapped to the assistant backend. Defaults to `8000`. |

@@ -11,11 +11,13 @@ services:
       GENAI_API_KEY: ${GENAI_API_KEY:-}
       REGION: ${REGION:-}
       OCI_MODEL_ID: ${OCI_MODEL_ID:-openai.gpt-5.4}
+      NUTRITION_DB_PATH: ${NUTRITION_DB_PATH:-/data/garmin_ai_coach.db}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${ASSISTANT_API_PORT:-8000}:8000"
     volumes:
       - garmin-session:/app/.garmin
+      - assistant-data:/data
 
   frontend:
     build:
@@ -32,3 +34,4 @@ services:
 
 volumes:
   garmin-session:
+  assistant-data:

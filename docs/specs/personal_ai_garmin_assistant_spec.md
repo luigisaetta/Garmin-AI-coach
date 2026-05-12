@@ -125,9 +125,9 @@ Assistant backend
 OCI Enterprise AI, model openai.gpt-5.4
 ```
 
-The nutrition extension must not introduce an MCP server. It may introduce
-local persistence after the specification has been updated with the chosen
-storage design.
+The nutrition extension must not introduce an MCP server. The first persistence
+implementation uses SQLite inside the assistant backend service, with the
+database path configured by `NUTRITION_DB_PATH`.
 
 ## 6. Service responsibilities
 
@@ -210,9 +210,11 @@ Nutrition services must not:
 * Treat model-generated analysis as a clinical decision
 * Log raw diary entries, uploaded documents, or full nutrition prompts by default
 
-The initial nutrition implementation should prefer simple local persistence,
-such as SQLite, once persistence is formally introduced. A plain file store may
-be used only for early prototypes if the limitations are documented.
+The initial nutrition diary implementation uses simple local SQLite
+persistence. The SQLite database is local to the assistant backend service and
+must be stored on a Docker volume in container deployments so diary entries
+survive stop and restart. A separate database container is not part of the
+initial nutrition MVP.
 
 ## 7. Initial container model
 
@@ -244,6 +246,10 @@ The nutrition extension should initially run inside the assistant backend
 service behind local Python service boundaries. Adding a separate nutrition API
 container, document-processing worker, or database container is an architectural
 change and must update this specification before implementation.
+
+For the nutrition diary MVP, Docker Compose should mount a named volume at
+`/data` in the assistant backend container and default `NUTRITION_DB_PATH` to
+`/data/garmin_ai_coach.db`.
 
 ## 8. Backend implementation approach
 
@@ -328,10 +334,15 @@ class NutritionAnalysisService:
 Initial diary entries should support:
 
 * Date
-* Meal type, such as breakfast, lunch, dinner, snack, or other
-* Free-text food description
+* Training context for the day
+* Free-text meal description for the day
 * Optional notes
 * Optional tags
+
+The first implemented API may store one entry per calendar day with the fields
+`entry_date`, `training_type`, `meals_text`, and `notes`. More structured meal
+types can be added later without moving Garmin or assistant orchestration code
+into the nutrition service.
 
 The system should not require automatic calorie or macronutrient estimation in
 the first nutrition implementation. Such estimation may be added later only
@@ -515,14 +526,21 @@ The response is a `text/event-stream` stream of server-sent events. Initial even
 
 The frontend should treat `conversation_id` as stable across all events for the same assistant turn.
 
-### 11.4 Nutrition API, planned draft
+### 11.4 Nutrition API
 
 The nutrition extension may expose ordinary backend HTTP endpoints in addition
-to chat workflows. Initial endpoint candidates are:
+to chat workflows. The diary MVP exposes:
 
 ```text
-POST /nutrition/diary/entries
-GET /nutrition/diary/entries?begin_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+POST /nutrition/diary-entries
+PUT /nutrition/diary-entries/{entry_date}
+GET /nutrition/diary-entries/{entry_date}
+```
+
+Future endpoint candidates include:
+
+```text
+GET /nutrition/diary-entries?begin_date=YYYY-MM-DD&end_date=YYYY-MM-DD
 POST /nutrition/plans
 GET /nutrition/plans/current
 POST /nutrition/reports/weekly
@@ -775,7 +793,6 @@ These questions should be resolved before or during implementation:
 * Which OCI region should be used as the default development region?
 * Should the assistant keep conversation history locally, and if so, where?
 * Which activity types should be prioritised first, running, cycling, swimming, strength, or all available activities?
-* Should nutrition data use SQLite as the first persistent store?
 * Should uploaded nutrition-plan originals be retained, or should only extracted text and structured summaries be stored?
 * What maximum upload size should be allowed for nutrition documents?
 * Which PDF extraction library should be used?

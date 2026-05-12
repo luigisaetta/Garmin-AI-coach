@@ -6,6 +6,7 @@ License: MIT
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -68,3 +69,32 @@ class HealthResponse(BaseModel):
 
     status: Literal["ok"]
     service: Literal["assistant_api"]
+
+
+class NutritionDiaryEntryRequest(BaseModel):
+    """Request payload for creating or updating one nutrition diary day."""
+
+    entry_date: date
+    training_type: str = Field(min_length=1, max_length=80)
+    meals_text: str = Field(min_length=1, max_length=12000)
+    notes: str = Field(default="", max_length=4000)
+
+
+class NutritionDiaryEntryUpdateRequest(BaseModel):
+    """Request payload for updating the nutrition diary day in the URL."""
+
+    training_type: str = Field(min_length=1, max_length=80)
+    meals_text: str = Field(min_length=1, max_length=12000)
+    notes: str = Field(default="", max_length=4000)
+
+
+class NutritionDiaryEntryResponse(BaseModel):
+    """Stored nutrition diary entry returned by the assistant API."""
+
+    id: int
+    entry_date: date
+    training_type: str
+    meals_text: str
+    notes: str
+    created_at: datetime
+    updated_at: datetime

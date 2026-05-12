@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-11
+Date Modified: 2026-05-12
 License: MIT
 """
 
@@ -10,16 +10,25 @@ import json
 import logging
 import os
 from collections.abc import AsyncIterator
+from datetime import date
 from functools import lru_cache
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
 from services.assistant_api.api.schemas import (
     ChatRequest,
     ChatResponse,
     HealthResponse,
+    NutritionDiaryEntryRequest,
+    NutritionDiaryEntryResponse,
+    NutritionDiaryEntryUpdateRequest,
+)
+from services.assistant_api.nutrition.diary import (
+    NutritionDiaryEntry,
+    NutritionDiaryEntryInput,
+    NutritionDiaryService,
 )
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
@@ -61,6 +70,15 @@ def get_training_data_provider() -> TrainingDataProvider:
     )
     LOGGER.info("training provider init done")
     return provider
+
+
+@lru_cache(maxsize=1)
+def get_nutrition_diary_service() -> NutritionDiaryService:
+    """Create the local nutrition diary persistence service once."""
+    load_dotenv()
+    database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
+    LOGGER.info("nutrition diary service init database_path=%s", database_path)
+    return NutritionDiaryService(database_path)
 
 
 def get_orchestrator() -> AssistantOrchestrator:
@@ -113,6 +131,64 @@ def create_app() -> FastAPI:
             headers={"Cache-Control": "no-cache"},
         )
 
+    @api.post(
+        "/nutrition/diary-entries",
+        response_model=NutritionDiaryEntryResponse,
+    )
+    async def upsert_nutrition_diary_entry(
+        request: NutritionDiaryEntryRequest,
+        diary_service: NutritionDiaryService = Depends(get_nutrition_diary_service),
+    ) -> NutritionDiaryEntryResponse:
+        """Create or update a nutrition diary entry for the selected day."""
+        LOGGER.info("nutrition diary upsert request entry_date=%s", request.entry_date)
+        entry = diary_service.upsert_entry(
+            NutritionDiaryEntryInput(
+                entry_date=request.entry_date,
+                training_type=request.training_type,
+                meals_text=request.meals_text,
+                notes=request.notes,
+            )
+        )
+        return _diary_entry_response(entry)
+
+    @api.get(
+        "/nutrition/diary-entries/{entry_date}",
+        response_model=NutritionDiaryEntryResponse,
+    )
+    async def get_nutrition_diary_entry(
+        entry_date: date,
+        diary_service: NutritionDiaryService = Depends(get_nutrition_diary_service),
+    ) -> NutritionDiaryEntryResponse:
+        """Return the nutrition diary entry for one day."""
+        LOGGER.info("nutrition diary get request entry_date=%s", entry_date)
+        entry = diary_service.get_entry(entry_date)
+        if entry is None:
+            raise HTTPException(
+                status_code=404, detail="Nutrition diary entry not found"
+            )
+        return _diary_entry_response(entry)
+
+    @api.put(
+        "/nutrition/diary-entries/{entry_date}",
+        response_model=NutritionDiaryEntryResponse,
+    )
+    async def update_nutrition_diary_entry(
+        entry_date: date,
+        request: NutritionDiaryEntryUpdateRequest,
+        diary_service: NutritionDiaryService = Depends(get_nutrition_diary_service),
+    ) -> NutritionDiaryEntryResponse:
+        """Create or update the nutrition diary entry for one URL date."""
+        LOGGER.info("nutrition diary update request entry_date=%s", entry_date)
+        entry = diary_service.upsert_entry(
+            NutritionDiaryEntryInput(
+                entry_date=entry_date,
+                training_type=request.training_type,
+                meals_text=request.meals_text,
+                notes=request.notes,
+            )
+        )
+        return _diary_entry_response(entry)
+
     return api
 
 
@@ -133,6 +209,21 @@ async def _sse_events(
             "delta": str(exc),
         }
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+
+
+def _diary_entry_response(
+    entry: NutritionDiaryEntry,
+) -> NutritionDiaryEntryResponse:
+    """Convert a stored diary entry into the API response schema."""
+    return NutritionDiaryEntryResponse(
+        id=entry.id,
+        entry_date=entry.entry_date,
+        training_type=entry.training_type,
+        meals_text=entry.meals_text,
+        notes=entry.notes,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
 
 
 app = create_app()

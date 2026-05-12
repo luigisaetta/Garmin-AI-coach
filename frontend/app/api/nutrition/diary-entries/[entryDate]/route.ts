@@ -1,0 +1,85 @@
+/*
+ * Author: L. Saetta
+ * Version: 0.1.0
+ * Last modified: 2026-05-12
+ * License: MIT
+ */
+
+import { NextResponse } from "next/server";
+
+const ASSISTANT_API_URL =
+  process.env.ASSISTANT_API_URL ??
+  process.env.NEXT_PUBLIC_ASSISTANT_API_URL ??
+  "http://127.0.0.1:8000";
+
+type RouteContext = {
+  params: Promise<{
+    entryDate: string;
+  }>;
+};
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export async function GET(_request: Request, context: RouteContext) {
+  const { entryDate } = await context.params;
+
+  try {
+    const response = await fetch(
+      `${ASSISTANT_API_URL}/nutrition/diary-entries/${entryDate}`,
+      {
+        cache: "no-store",
+      },
+    );
+
+    if (response.status === 404) {
+      return NextResponse.json(null, { status: 404 });
+    }
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { message: `Assistant API returned HTTP ${response.status}` },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json(await response.json());
+  } catch {
+    return NextResponse.json(
+      { message: "Assistant API is unavailable" },
+      { status: 502 },
+    );
+  }
+}
+
+export async function PUT(request: Request, context: RouteContext) {
+  const { entryDate } = await context.params;
+  const body = await request.text();
+
+  try {
+    const response = await fetch(
+      `${ASSISTANT_API_URL}/nutrition/diary-entries/${entryDate}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body,
+      },
+    );
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { message: `Assistant API returned HTTP ${response.status}` },
+        { status: response.status === 422 ? 422 : 502 },
+      );
+    }
+
+    return NextResponse.json(await response.json());
+  } catch {
+    return NextResponse.json(
+      { message: "Assistant API is unavailable" },
+      { status: 502 },
+    );
+  }
+}

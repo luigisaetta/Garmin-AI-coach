@@ -15,7 +15,7 @@ import {
   MessageSquareText,
   Moon,
   NotebookPen,
-  SaveOff,
+  Save,
   Soup,
   Sun,
 } from "lucide-react";
@@ -23,6 +23,17 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "black";
+type DiaryState = "loading" | "editing" | "saved" | "missing" | "error";
+
+type NutritionDiaryEntry = {
+  id: number;
+  entry_date: string;
+  training_type: string;
+  meals_text: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
 
 const TRAINING_TYPES = [
   "Rest day",
@@ -46,11 +57,63 @@ export default function NutritionDiaryDemo() {
   const [trainingType, setTrainingType] = useState(TRAINING_TYPES[0]);
   const [meals, setMeals] = useState("");
   const [notes, setNotes] = useState("");
-  const [draftState, setDraftState] = useState<"editing" | "previewed">("editing");
+  const [diaryState, setDiaryState] = useState<DiaryState>("loading");
+  const [savedEntry, setSavedEntry] = useState<NutritionDiaryEntry | null>(null);
+  const [statusMessage, setStatusMessage] = useState("Loading diary entry");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadEntry() {
+      setDiaryState("loading");
+      setStatusMessage("Loading diary entry");
+      setSavedEntry(null);
+
+      try {
+        const response = await fetch(
+          `/api/nutrition/diary-entries/${encodeURIComponent(diaryDate)}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        if (response.status === 404) {
+          setTrainingType(TRAINING_TYPES[0]);
+          setMeals("");
+          setNotes("");
+          setDiaryState("missing");
+          setStatusMessage("No entry for this date");
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Diary API returned HTTP ${response.status}`);
+        }
+
+        const entry = (await response.json()) as NutritionDiaryEntry;
+        setSavedEntry(entry);
+        setTrainingType(entry.training_type);
+        setMeals(entry.meals_text);
+        setNotes(entry.notes);
+        setDiaryState("saved");
+        setStatusMessage("Saved entry loaded");
+      } catch (caughtError) {
+        if ((caughtError as Error).name === "AbortError") {
+          return;
+        }
+        setDiaryState("error");
+        setStatusMessage("Could not load this diary entry");
+      }
+    }
+
+    loadEntry();
+    return () => controller.abort();
+  }, [diaryDate]);
 
   const formattedDate = useMemo(
     () =>
@@ -63,9 +126,48 @@ export default function NutritionDiaryDemo() {
     [diaryDate],
   );
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setDraftState("previewed");
+    const trimmedMeals = meals.trim();
+    if (!trimmedMeals) {
+      setDiaryState("error");
+      setStatusMessage("Meal description is required");
+      return;
+    }
+
+    setDiaryState("loading");
+    setStatusMessage("Saving diary entry");
+
+    try {
+      const response = await fetch(
+        `/api/nutrition/diary-entries/${encodeURIComponent(diaryDate)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            training_type: trainingType,
+            meals_text: trimmedMeals,
+            notes: notes.trim(),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Diary API returned HTTP ${response.status}`);
+      }
+
+      const entry = (await response.json()) as NutritionDiaryEntry;
+      setSavedEntry(entry);
+      setMeals(entry.meals_text);
+      setNotes(entry.notes);
+      setDiaryState("saved");
+      setStatusMessage("Diary entry saved");
+    } catch {
+      setDiaryState("error");
+      setStatusMessage("Could not save this diary entry");
+    }
   }
 
   return (
@@ -103,11 +205,15 @@ export default function NutritionDiaryDemo() {
         <section className="panel">
           <div className="panelTitle">
             <NotebookPen size={17} />
-            <h2>Diary demo</h2>
+            <h2>Food diary</h2>
           </div>
-          <div className="statusLine online">
-            <SaveOff size={17} />
-            <span>Draft only, backend storage not connected</span>
+          <div
+            className={`statusLine ${
+              diaryState === "error" ? "offline" : "online"
+            }`}
+          >
+            <Save size={17} />
+            <span>{statusMessage}</span>
           </div>
           <div className="miniGrid">
             <div className="metric teal">
@@ -120,7 +226,7 @@ export default function NutritionDiaryDemo() {
             </div>
             <div className="metric gold">
               <small>Status</small>
-              <strong>{draftState === "previewed" ? "Preview" : "Editing"}</strong>
+              <strong>{diaryState}</strong>
             </div>
           </div>
         </section>
@@ -153,7 +259,7 @@ export default function NutritionDiaryDemo() {
         </section>
       </aside>
 
-      <section className="diaryShell" aria-label="Food diary demo">
+      <section className="diaryShell" aria-label="Food diary">
         <header className="topbar">
           <span>
             <h2>Food diary</h2>
@@ -161,7 +267,7 @@ export default function NutritionDiaryDemo() {
           </span>
           <div className="topSignal">
             <Soup size={18} />
-            <span>Demo UI, no saved data</span>
+            <span>Daily diary</span>
           </div>
         </header>
 
@@ -183,10 +289,7 @@ export default function NutritionDiaryDemo() {
                 <input
                   type="date"
                   value={diaryDate}
-                  onChange={(event) => {
-                    setDiaryDate(event.target.value);
-                    setDraftState("editing");
-                  }}
+                  onChange={(event) => setDiaryDate(event.target.value)}
                 />
               </label>
 
@@ -196,7 +299,8 @@ export default function NutritionDiaryDemo() {
                   value={trainingType}
                   onChange={(event) => {
                     setTrainingType(event.target.value);
-                    setDraftState("editing");
+                    setDiaryState("editing");
+                    setStatusMessage("Unsaved changes");
                   }}
                 >
                   {TRAINING_TYPES.map((type) => (
@@ -224,7 +328,8 @@ export default function NutritionDiaryDemo() {
                   value={meals}
                   onChange={(event) => {
                     setMeals(event.target.value);
-                    setDraftState("editing");
+                    setDiaryState("editing");
+                    setStatusMessage("Unsaved changes");
                   }}
                   placeholder="Example: Breakfast: yogurt, oats, banana. Lunch: rice, chicken, salad. Pre-run snack: toast with honey..."
                 />
@@ -237,15 +342,20 @@ export default function NutritionDiaryDemo() {
                   value={notes}
                   onChange={(event) => {
                     setNotes(event.target.value);
-                    setDraftState("editing");
+                    setDiaryState("editing");
+                    setStatusMessage("Unsaved changes");
                   }}
                   placeholder="Energy, hunger, digestion, hydration, race-day experiments, or questions for the nutritionist."
                 />
               </label>
 
-              <button className="primaryAction" type="submit">
-                <NotebookPen size={17} />
-                <span>Preview entry</span>
+              <button
+                className="primaryAction"
+                disabled={diaryState === "loading"}
+                type="submit"
+              >
+                <Save size={17} />
+                <span>{savedEntry ? "Update day" : "Save day"}</span>
               </button>
             </section>
           </form>
@@ -257,7 +367,7 @@ export default function NutritionDiaryDemo() {
               </span>
               <span>
                 <h3>Current draft</h3>
-                <p>{draftState === "previewed" ? "Ready for future save flow" : "Editing"}</p>
+                <p>{statusMessage}</p>
               </span>
             </div>
 
@@ -278,6 +388,17 @@ export default function NutritionDiaryDemo() {
                 <dt>Notes</dt>
                 <dd>{notes.trim() || "No notes added yet."}</dd>
               </div>
+              {savedEntry ? (
+                <div>
+                  <dt>Updated</dt>
+                  <dd>
+                    {new Intl.DateTimeFormat("en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(savedEntry.updated_at))}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </aside>
         </div>
