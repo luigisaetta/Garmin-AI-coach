@@ -336,6 +336,31 @@ class NutritionAnalysisService:
         ...
 ```
 
+The first nutrition analysis implementation is a linear Python subagent graph
+that accepts `begin_date` and `end_date` as input and runs these steps in order:
+
+1. `ReadNutritionPlanStep` reads the current uploaded nutrition plan from local
+   persistence.
+2. `ReadDiaryEntriesStep` reads food diary entries day by day for the inclusive
+   period, aggregates them, and records missing diary dates.
+3. `ReadTrainingActivitiesStep` reads Garmin workouts for the same period
+   through the local training data provider boundary and summarizes activity
+   type, duration, timing, intensity, and combined workout days.
+4. `GenerateNutritionReportStep` calls the Responses API with a dedicated
+   nutrition analysis prompt and returns a detailed adherence report.
+
+Each step should be implemented as a dedicated Python class and should log start
+and completion messages without logging raw diary text, full plan text, raw
+activity payloads, or complete model prompts.
+
+The nutrition analysis subagent may comment on apparent macronutrient gaps and
+calorie-volume adequacy only relative to the explicit uploaded plan, the diary
+text, and the observed training load. When the plan or diary does not contain
+enough detail, the report must state the uncertainty instead of inventing
+calorie or macronutrient values. The report should include adherence findings,
+points of attention, improvements, and questions to discuss with the
+nutritionist.
+
 Initial diary entries should support:
 
 * Date

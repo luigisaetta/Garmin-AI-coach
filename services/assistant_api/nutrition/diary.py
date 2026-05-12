@@ -108,6 +108,36 @@ class NutritionDiaryService:
 
         return _entry_from_row(row)
 
+    def list_entries(
+        self,
+        *,
+        begin_date: date,
+        end_date: date,
+    ) -> list[NutritionDiaryEntry]:
+        """Return diary entries for an inclusive date range."""
+        if begin_date > end_date:
+            raise ValueError("begin_date must be before or equal to end_date")
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    entry_date,
+                    training_type,
+                    meals_text,
+                    notes,
+                    created_at,
+                    updated_at
+                FROM nutrition_diary_entries
+                WHERE entry_date >= ? AND entry_date <= ?
+                ORDER BY entry_date ASC
+                """,
+                (begin_date.isoformat(), end_date.isoformat()),
+            ).fetchall()
+
+        return [_entry_from_row(row) for row in rows]
+
     def _initialize_schema(self) -> None:
         """Create database tables needed by the nutrition diary service."""
         with self._connect() as connection:

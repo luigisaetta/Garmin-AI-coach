@@ -69,3 +69,54 @@ def test_get_entry_returns_none_for_missing_day(tmp_path) -> None:
     service = NutritionDiaryService(tmp_path / "nutrition.db")
 
     assert service.get_entry(date(2026, 5, 12)) is None
+
+
+def test_list_entries_returns_entries_in_inclusive_date_range(tmp_path) -> None:
+    """Verify diary entries can be read for an inclusive analysis period."""
+    service = NutritionDiaryService(tmp_path / "nutrition.db")
+    service.upsert_entry(
+        NutritionDiaryEntryInput(
+            entry_date=date(2026, 5, 10),
+            training_type="Rest",
+            meals_text="Outside period.",
+        )
+    )
+    service.upsert_entry(
+        NutritionDiaryEntryInput(
+            entry_date=date(2026, 5, 12),
+            training_type="Run",
+            meals_text="Breakfast: oats.",
+        )
+    )
+    service.upsert_entry(
+        NutritionDiaryEntryInput(
+            entry_date=date(2026, 5, 13),
+            training_type="Bike",
+            meals_text="Lunch: rice.",
+        )
+    )
+
+    entries = service.list_entries(
+        begin_date=date(2026, 5, 12),
+        end_date=date(2026, 5, 13),
+    )
+
+    assert [entry.entry_date for entry in entries] == [
+        date(2026, 5, 12),
+        date(2026, 5, 13),
+    ]
+
+
+def test_list_entries_rejects_invalid_range(tmp_path) -> None:
+    """Verify diary range reads reject a start date after the end date."""
+    service = NutritionDiaryService(tmp_path / "nutrition.db")
+
+    try:
+        service.list_entries(
+            begin_date=date(2026, 5, 14),
+            end_date=date(2026, 5, 12),
+        )
+    except ValueError as exc:
+        assert "begin_date" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
