@@ -31,6 +31,10 @@ from services.assistant_api.nutrition.diary import (
     NutritionDiaryEntryInput,
     NutritionDiaryService,
 )
+from services.assistant_api.nutrition.analysis import (
+    NutritionAnalysisSettings,
+    NutritionAnalysisSubAgent,
+)
 from services.assistant_api.nutrition.plan import NutritionPlan, NutritionPlanService
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
@@ -95,11 +99,20 @@ def get_nutrition_plan_service() -> NutritionPlanService:
 def get_orchestrator() -> AssistantOrchestrator:
     """Create the assistant orchestrator used by request handlers."""
     settings = load_settings()
+    inference_client = get_inference_client()
+    training_client = LocalTrainingDataClient(get_training_data_provider())
     LOGGER.info("orchestrator create model_id=%s", settings.model_id)
     return AssistantOrchestrator(
         settings=settings,
-        inference_client=get_inference_client(),
-        training_client=LocalTrainingDataClient(get_training_data_provider()),
+        inference_client=inference_client,
+        training_client=training_client,
+        nutrition_analysis_agent=NutritionAnalysisSubAgent.create(
+            plan_service=get_nutrition_plan_service(),
+            diary_service=get_nutrition_diary_service(),
+            training_client=training_client,
+            inference_client=inference_client,
+            settings=NutritionAnalysisSettings(model_id=settings.model_id),
+        ),
     )
 
 

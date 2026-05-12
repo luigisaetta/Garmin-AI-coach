@@ -8,12 +8,15 @@ from __future__ import annotations
 
 # pylint: disable=duplicate-code
 
+import json
+from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from services.assistant_api.api.schemas import ChatMessage
+from services.assistant_api.nutrition.analysis import NutritionAnalysisResult
 from services.assistant_api.orchestration import responses_tools
 from services.assistant_api.orchestration.prompts import SYSTEM_PROMPT
 from services.assistant_api.orchestration.responses_tools import AssistantToolRunner
@@ -88,14 +91,53 @@ class FailingTrainingClient:  # pylint: disable=too-few-public-methods
         raise ValueError("Training data provider failed.")
 
 
+class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
+    """Fake nutrition subagent for assistant tool execution tests."""
+
+    def __init__(self) -> None:
+        """Initialize captured analysis calls."""
+        self.calls: list[dict[str, Any]] = []
+
+    async def analyze(
+        self,
+        *,
+        begin_date: date,
+        end_date: date,
+    ) -> NutritionAnalysisResult:
+        """Capture the requested period and return a deterministic report."""
+        self.calls.append({"begin_date": begin_date, "end_date": end_date})
+        return NutritionAnalysisResult(
+            begin_date=begin_date,
+            end_date=end_date,
+            report="Report nutrizionale del periodo.",
+            plan_filename="plan.pdf",
+            diary_entry_count=3,
+            missing_diary_dates=[],
+            training_day_count=2,
+        )
+
+
 def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
-    """Verify both assistant tool schemas are exposed to the model."""
+    """Verify assistant tool schemas are exposed to the model."""
     runner = AssistantToolRunner(FakeTrainingClient())
 
     tool_names = {tool["name"] for tool in runner.tool_definitions()}
 
     assert tool_names == {"list_activities", "get_heart_rates"}
     assert "get_heart_rates" in SYSTEM_PROMPT
+    assert "analyze_nutrition_adherence_week" in SYSTEM_PROMPT
+
+
+def test_tool_definitions_include_nutrition_tool_when_subagent_exists() -> None:
+    """Verify nutrition analysis is exposed only when configured."""
+    runner = AssistantToolRunner(
+        FakeTrainingClient(),
+        nutrition_analysis_agent=FakeNutritionAnalysisAgent(),
+    )
+
+    tool_names = {tool["name"] for tool in runner.tool_definitions()}
+
+    assert "analyze_nutrition_adherence_week" in tool_names
 
 
 def test_build_model_input_includes_history_and_latest_request() -> None:
@@ -192,6 +234,42 @@ async def test_build_tool_outputs_uses_model_extracted_heart_rate_range() -> Non
 
 
 @pytest.mark.anyio
+async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
+    """Verify the assistant can execute the nutrition analysis tool."""
+    nutrition_agent = FakeNutritionAnalysisAgent()
+    function_call = SimpleNamespace(
+        type="function_call",
+        name="analyze_nutrition_adherence_week",
+        call_id="call_nutrition",
+        arguments='{"begin_date": "2026-05-04", "end_date": "2026-05-10"}',
+    )
+
+    outputs = await responses_tools.build_tool_outputs(
+        function_calls=[function_call],
+        tool_runner=AssistantToolRunner(
+            FakeTrainingClient(),
+            nutrition_analysis_agent=nutrition_agent,
+        ),
+    )
+
+    assert nutrition_agent.calls == [
+        {
+            "begin_date": date(2026, 5, 4),
+            "end_date": date(2026, 5, 10),
+        }
+    ]
+    assert outputs[0]["type"] == "function_call_output"
+    assert outputs[0]["call_id"] == "call_nutrition"
+    payload = json.loads(outputs[0]["output"])
+    assert payload["period"] == {
+        "begin_date": "2026-05-04",
+        "end_date": "2026-05-10",
+    }
+    assert payload["report"] == "Report nutrizionale del periodo."
+    assert payload["sources"]["plan_filename"] == "plan.pdf"
+
+
+@pytest.mark.anyio
 async def test_build_tool_outputs_returns_error_for_missing_dates() -> None:
     """Verify that invalid model tool arguments are returned as tool output."""
     training_client = FakeTrainingClient()
@@ -232,6 +310,7 @@ def test_tool_data_sources_describe_unique_requested_tools() -> None:
     function_calls = [
         SimpleNamespace(type="function_call", name="list_activities"),
         SimpleNamespace(type="function_call", name="get_heart_rates"),
+        SimpleNamespace(type="function_call", name="analyze_nutrition_adherence_week"),
         SimpleNamespace(type="function_call", name="get_heart_rates"),
     ]
 
@@ -240,6 +319,7 @@ def test_tool_data_sources_describe_unique_requested_tools() -> None:
     assert [source.type for source in data_sources] == [
         "garmin_activity_range",
         "garmin_heart_rate_range",
+        "nutrition_adherence_analysis",
     ]
 
 

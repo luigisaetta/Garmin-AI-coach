@@ -9,11 +9,13 @@ from __future__ import annotations
 # pylint: disable=duplicate-code
 
 from types import SimpleNamespace
+from datetime import date
 from typing import Any
 
 import pytest
 
 from services.assistant_api.api.schemas import ChatRequest
+from services.assistant_api.nutrition.analysis import NutritionAnalysisResult
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
     AssistantSettings,
@@ -183,6 +185,32 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
         return {begin_date: {"calendarDate": begin_date, "restingHeartRate": 48}}
 
 
+class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
+    """Fake nutrition analysis subagent."""
+
+    def __init__(self) -> None:
+        """Initialize captured nutrition analysis calls."""
+        self.calls: list[dict[str, date]] = []
+
+    async def analyze(
+        self,
+        *,
+        begin_date: date,
+        end_date: date,
+    ) -> NutritionAnalysisResult:
+        """Capture the requested period and return a deterministic report."""
+        self.calls.append({"begin_date": begin_date, "end_date": end_date})
+        return NutritionAnalysisResult(
+            begin_date=begin_date,
+            end_date=end_date,
+            report="Report nutrizionale.",
+            plan_filename="plan.pdf",
+            diary_entry_count=4,
+            missing_diary_dates=[],
+            training_day_count=3,
+        )
+
+
 @pytest.mark.anyio
 async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
     """Verify the assistant performs one Responses API tool-call round."""
@@ -248,6 +276,35 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
             "activity_type": "heart_rate",
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
+    """Verify chat can expose and execute the nutrition subagent as a tool."""
+    inference_client = FakeInferenceClient(tool_name="analyze_nutrition_adherence_week")
+    training_client = FakeTrainingClient()
+    nutrition_agent = FakeNutritionAnalysisAgent()
+    orchestrator = AssistantOrchestrator(
+        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        inference_client=inference_client,
+        training_client=training_client,
+        nutrition_analysis_agent=nutrition_agent,
+    )
+
+    response = await orchestrator.complete_chat(
+        ChatRequest(message="Analizza l'aderenza nutrizionale della scorsa settimana")
+    )
+
+    assert response.data_sources[0].type == "nutrition_adherence_analysis"
+    assert nutrition_agent.calls == [
+        {
+            "begin_date": date(2026, 5, 4),
+            "end_date": date(2026, 5, 10),
+        }
+    ]
+    assert "analyze_nutrition_adherence_week" in {
+        tool["name"] for tool in inference_client.responses.calls[0]["tools"]
+    }
 
 
 @pytest.mark.anyio

@@ -50,6 +50,7 @@ class AssistantOrchestrator:
         settings: AssistantSettings,
         inference_client: Any,
         training_client: TrainingActivitiesClient,
+        nutrition_analysis_agent: Any | None = None,
     ) -> None:
         """Create an assistant orchestrator.
 
@@ -57,10 +58,15 @@ class AssistantOrchestrator:
             settings: Runtime model and service settings.
             inference_client: OpenAI-compatible client for Responses API calls.
             training_client: Local training data client used by assistant tools.
+            nutrition_analysis_agent: Optional nutrition subagent used by assistant
+                tools for period adherence analysis.
         """
         self._settings = settings
         self._inference_client = inference_client
-        self._tool_runner = AssistantToolRunner(training_client)
+        self._tool_runner = AssistantToolRunner(
+            training_client,
+            nutrition_analysis_agent=nutrition_analysis_agent,
+        )
 
     async def complete_chat(self, request: ChatRequest) -> ChatResponse:
         """Return a complete chat answer for callers that do not stream."""

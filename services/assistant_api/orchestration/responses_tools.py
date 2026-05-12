@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from typing import Any
 
 from services.assistant_api.api.schemas import ChatMessage, DataSource
@@ -73,7 +74,36 @@ GET_HEART_RATES_TOOL: dict[str, Any] = {
     },
 }
 
-AVAILABLE_TOOLS = [LIST_ACTIVITIES_TOOL, GET_HEART_RATES_TOOL]
+ANALYZE_NUTRITION_ADHERENCE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "analyze_nutrition_adherence_week",
+    "description": (
+        "Run the nutrition analysis subagent for an inclusive date range. "
+        "Use this when the user asks to analyze nutrition adherence, compare "
+        "their food diary with the current nutrition plan, or relate nutrition "
+        "to training load for a specific period."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "begin_date": {
+                "type": "string",
+                "description": "Inclusive start date in YYYY-MM-DD format.",
+            },
+            "end_date": {
+                "type": "string",
+                "description": "Inclusive end date in YYYY-MM-DD format.",
+            },
+        },
+        "required": ["begin_date", "end_date"],
+        "additionalProperties": False,
+    },
+}
+
+BASE_TOOLS = [
+    LIST_ACTIVITIES_TOOL,
+    GET_HEART_RATES_TOOL,
+]
 
 
 def build_model_input(
@@ -137,6 +167,13 @@ def tool_data_sources(function_calls: list[Any]) -> list[DataSource]:
             type="garmin_heart_rate_range",
             description="Heart-rate data returned by the local training provider.",
         ),
+        "analyze_nutrition_adherence_week": DataSource(
+            type="nutrition_adherence_analysis",
+            description=(
+                "Nutrition analysis produced by the local nutrition subagent "
+                "from the current plan, diary entries, and training summaries."
+            ),
+        ),
     }
     data_sources: list[DataSource] = []
     seen_types: set[str] = set()
@@ -166,7 +203,7 @@ async def build_tool_outputs(
         try:
             arguments = parse_tool_arguments(call)
             output = await tool_runner.run_tool(tool_name, arguments)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             output = json.dumps({"error": str(exc)})
 
         outputs.append(
@@ -183,13 +220,20 @@ async def build_tool_outputs(
 class AssistantToolRunner:
     """Execute model-selected assistant tools behind one generic dispatcher."""
 
-    def __init__(self, training_client: TrainingActivitiesClient) -> None:
+    def __init__(
+        self,
+        training_client: TrainingActivitiesClient,
+        nutrition_analysis_agent: Any | None = None,
+    ) -> None:
         """Create a tool runner with access to backend service clients."""
         self._training_client = training_client
+        self._nutrition_analysis_agent = nutrition_analysis_agent
 
     def tool_definitions(self) -> list[dict[str, Any]]:
         """Return the tool schemas exposed to the model."""
-        return AVAILABLE_TOOLS
+        if self._nutrition_analysis_agent is None:
+            return BASE_TOOLS
+        return [*BASE_TOOLS, ANALYZE_NUTRITION_ADHERENCE_TOOL]
 
     async def run_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Run one model-selected tool by name.
@@ -208,6 +252,8 @@ class AssistantToolRunner:
             return await self._run_list_activities(arguments)
         if tool_name == "get_heart_rates":
             return await self._run_get_heart_rates(arguments)
+        if tool_name == "analyze_nutrition_adherence_week":
+            return await self._run_analyze_nutrition_adherence(arguments)
 
         raise ValueError(f"Unsupported tool requested: {tool_name}")
 
@@ -241,6 +287,34 @@ class AssistantToolRunner:
         LOGGER.info("tool get_heart_rates done day_count=%d", len(heart_rates))
         return json.dumps({"heart_rates": heart_rates}, default=str)
 
+    async def _run_analyze_nutrition_adherence(
+        self,
+        arguments: dict[str, Any],
+    ) -> str:
+        """Run the nutrition analysis subagent tool."""
+        if self._nutrition_analysis_agent is None:
+            raise ValueError("Nutrition analysis tool is not configured.")
+
+        begin_date = date.fromisoformat(arguments["begin_date"])
+        end_date = date.fromisoformat(arguments["end_date"])
+        LOGGER.info(
+            "tool analyze_nutrition_adherence_week start begin_date=%s end_date=%s",
+            begin_date,
+            end_date,
+        )
+        result = await self._nutrition_analysis_agent.analyze(
+            begin_date=begin_date,
+            end_date=end_date,
+        )
+        LOGGER.info(
+            "tool analyze_nutrition_adherence_week done diary_entries=%d "
+            "missing_days=%d training_days=%d",
+            result.diary_entry_count,
+            len(result.missing_diary_dates),
+            result.training_day_count,
+        )
+        return json.dumps(_nutrition_analysis_output(result), default=str)
+
 
 def parse_tool_arguments(function_call: Any) -> dict[str, Any]:
     """Parse JSON tool arguments emitted by a Responses API function call."""
@@ -253,6 +327,28 @@ def parse_tool_arguments(function_call: Any) -> dict[str, Any]:
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be a JSON object.")
     return arguments
+
+
+def _nutrition_analysis_output(result: Any) -> dict[str, Any]:
+    """Convert nutrition subagent output into a model tool payload."""
+    return {
+        "period": {
+            "begin_date": result.begin_date.isoformat(),
+            "end_date": result.end_date.isoformat(),
+        },
+        "report": result.report,
+        "sources": {
+            "plan_filename": result.plan_filename,
+            "diary_entry_count": result.diary_entry_count,
+            "missing_diary_dates": [
+                missing_date.isoformat() for missing_date in result.missing_diary_dates
+            ],
+            "training_day_count": result.training_day_count,
+        },
+        "token_usage": (
+            result.token_usage.model_dump() if result.token_usage is not None else None
+        ),
+    }
 
 
 def _get_item_value(item: Any, key: str) -> Any:
