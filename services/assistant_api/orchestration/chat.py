@@ -20,9 +20,9 @@ from services.assistant_api.api.schemas import (
     ChatStreamEvent,
     TokenUsage,
 )
+from services.assistant_api.orchestration.prompts import SYSTEM_PROMPT
 from services.assistant_api.orchestration.responses_tools import (
     AssistantToolRunner,
-    SYSTEM_PROMPT,
     build_model_input,
     build_tool_outputs,
     get_function_calls,

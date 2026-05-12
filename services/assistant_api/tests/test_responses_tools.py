@@ -15,6 +15,7 @@ import pytest
 
 from services.assistant_api.api.schemas import ChatMessage
 from services.assistant_api.orchestration import responses_tools
+from services.assistant_api.orchestration.prompts import SYSTEM_PROMPT
 from services.assistant_api.orchestration.responses_tools import AssistantToolRunner
 
 
@@ -94,7 +95,7 @@ def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
     tool_names = {tool["name"] for tool in runner.tool_definitions()}
 
     assert tool_names == {"list_activities", "get_heart_rates"}
-    assert "get_heart_rates" in responses_tools.SYSTEM_PROMPT
+    assert "get_heart_rates" in SYSTEM_PROMPT
 
 
 def test_build_model_input_includes_history_and_latest_request() -> None:

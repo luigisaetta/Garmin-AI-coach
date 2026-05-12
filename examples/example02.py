@@ -16,9 +16,9 @@ from typing import Any
 from dotenv import load_dotenv
 
 from examples.common import build_provider_from_environment, configure_logging
+from services.assistant_api.orchestration.prompts import SYSTEM_PROMPT
 from services.assistant_api.orchestration.responses_tools import (
     AssistantToolRunner,
-    SYSTEM_PROMPT,
     build_tool_outputs,
     get_function_calls,
     response_output_as_input,
