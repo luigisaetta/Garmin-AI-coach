@@ -116,6 +116,27 @@ The frontend is exposed at `http://localhost:3000`. The assistant backend is exp
 
 If one of those host ports is already in use, override `FRONTEND_PORT` or `ASSISTANT_API_PORT` in `.env`.
 
+### Runtime Configuration
+
+Keep private values in `.env` or mounted secret files. Do not commit Garmin
+credentials, OCI API keys, generated Garmin session tokens, or local `.env`
+files.
+
+| Variable | Required | Used by | Description |
+| --- | --- | --- | --- |
+| `GARMIN_USERNAME` | Yes for live Garmin access | `assistant_api`, examples | Garmin Connect account username. |
+| `GARMIN_PASSWORD` | Yes for live Garmin access | `assistant_api`, examples | Garmin Connect account password. |
+| `GARMIN_SESSION_STORAGE_PATH` | Recommended | `assistant_api`, examples | Path where Garmin session tokens are reused and refreshed. Docker defaults this to `/app/.garmin/tokens`; local examples default to `.garmin/tokens`. |
+| `REDACT_PII` | No | `assistant_api`, Garmin provider | Masks account, owner, location, coordinate, and profile fields before training data can move toward assistant context. Defaults to `true`. |
+| `GENAI_API_KEY` | Yes for model calls | `assistant_api`, examples | OCI Enterprise AI OpenAI-compatible API key. |
+| `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
+| `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `ASSISTANT_API_URL` | Yes for local frontend development | frontend route handlers | Backend URL used by the Next.js server when running outside Docker, usually `http://localhost:8000`. Docker Compose sets this internally to `http://assistant_api:8000`. |
+| `NEXT_PUBLIC_ASSISTANT_API_URL` | No | frontend route handlers | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets this internally to `http://assistant_api:8000`. |
+| `ASSISTANT_API_PORT` | No | Docker Compose | Host port mapped to the assistant backend. Defaults to `8000`. |
+| `FRONTEND_PORT` | No | Docker Compose | Host port mapped to the frontend. Defaults to `3000`. |
+| `LOG_LEVEL` | No | `assistant_api` | Python logging level. Defaults to `INFO`. |
+
 ## Quickstart
 
 See `QUICKSTART.md` for local runtime and development environment setup.

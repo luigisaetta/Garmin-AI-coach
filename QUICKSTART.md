@@ -64,11 +64,31 @@ REDACT_PII=true
 GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4
-ASSISTANT_API_URL=
+ASSISTANT_API_URL=http://localhost:8000
+NEXT_PUBLIC_ASSISTANT_API_URL=http://localhost:8000
+ASSISTANT_API_PORT=8000
+FRONTEND_PORT=3000
 LOG_LEVEL=INFO
 ```
 
 For local development, keep private values in an untracked `.env` file or in shell-specific secret management.
+
+Configuration reference:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GARMIN_USERNAME` | Yes for live Garmin access | Garmin Connect account username used by the local training data provider. |
+| `GARMIN_PASSWORD` | Yes for live Garmin access | Garmin Connect account password used by the local training data provider. |
+| `GARMIN_SESSION_STORAGE_PATH` | Recommended | Local path for Garmin session token reuse. Use `.garmin/tokens` for local scripts. Docker Compose stores tokens in the `garmin-session` volume at `/app/.garmin/tokens`. |
+| `REDACT_PII` | No | Redacts account, owner, profile, location, and coordinate-like fields before data can move toward assistant context. Keep this set to `true` unless explicitly debugging sanitized provider behaviour. |
+| `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
+| `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
+| `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `ASSISTANT_API_URL` | Yes for local frontend development | URL the Next.js server uses to call the assistant backend when running outside Docker, usually `http://localhost:8000`. Docker Compose overrides it internally to `http://assistant_api:8000`. |
+| `NEXT_PUBLIC_ASSISTANT_API_URL` | No | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets it internally to `http://assistant_api:8000`. |
+| `ASSISTANT_API_PORT` | No | Host port for the assistant backend container. Defaults to `8000`. |
+| `FRONTEND_PORT` | No | Host port for the frontend container. Defaults to `3000`. |
+| `LOG_LEVEL` | No | Assistant backend logging level. Defaults to `INFO`. |
 
 ## Development Checks
 
