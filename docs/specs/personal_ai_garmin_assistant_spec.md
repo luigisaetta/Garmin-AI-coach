@@ -2,9 +2,14 @@
 
 ## 1. Purpose
 
-This document defines the initial architecture and implementation constraints for a personal AI assistant that answers questions about Garmin Connect training data.
+This document defines the initial architecture and implementation constraints
+for a personal AI assistant that answers questions about Garmin Connect training
+data and, in a later product extension, helps track nutrition-plan adherence.
 
-The project should start with a simple but rigorous architecture that can run locally on an Intel NUC with Ubuntu Linux, while remaining extensible for future features such as richer analytics, caching, additional data sources, and deeper coaching workflows.
+The project should start with a simple but rigorous architecture that can run
+locally on an Intel NUC with Ubuntu Linux, while remaining extensible for
+future features such as richer analytics, caching, additional data sources,
+nutrition-plan adherence analysis, and deeper coaching workflows.
 
 This document is referenced by `AGENTS.md` and should be treated as the source of truth for implementation decisions.
 
@@ -17,6 +22,18 @@ Build a web based personal AI assistant that can:
 * Use generative AI to answer interactive questions about workouts and training history
 * Present answers through a Next.js web interface
 * Run locally through Docker Compose on Ubuntu Linux
+
+A later nutrition extension should allow the user to:
+
+* Record a daily food diary with meals, free-text descriptions, and notes
+* Upload the current nutrition plan received from a nutritionist as PDF or Markdown
+* Extract and store a local, structured representation of the current nutrition plan
+* Compare diary entries with the current plan week by week
+* Surface adherence gaps, recurring patterns, and points to discuss with the nutritionist
+
+The nutrition extension is an adherence and reflection companion. It must not
+replace a nutritionist, prescribe a diet, diagnose medical conditions, or make
+clinical recommendations.
 
 Example user questions:
 
@@ -39,6 +56,8 @@ The initial version must not include:
 * Complex distributed infrastructure
 * Live writeback to Garmin Connect
 * Long term coaching plan generation unless explicitly added later
+* Autonomous diet prescription or medical nutrition advice
+* Replacing the judgement of a qualified nutrition professional
 
 ## 4. Target runtime
 
@@ -81,6 +100,35 @@ Assistant backend
 OCI Enterprise AI, model openai.gpt-5.4
 ```
 
+The nutrition extension keeps the same high-level service boundary:
+
+```text
+Browser
+  |
+  v
+Next.js frontend, nutrition section
+  |
+  v
+Assistant backend, Python
+  |
+  | local Python service calls
+  v
+Nutrition diary and plan services
+  |
+  v
+Local persistence
+
+Assistant backend
+  |
+  | Responses API
+  v
+OCI Enterprise AI, model openai.gpt-5.4
+```
+
+The nutrition extension must not introduce an MCP server. It may introduce
+local persistence after the specification has been updated with the chosen
+storage design.
+
 ## 6. Service responsibilities
 
 ### 6.1 Next.js frontend
@@ -88,8 +136,11 @@ OCI Enterprise AI, model openai.gpt-5.4
 The frontend is responsible for:
 
 * Rendering the assistant chat interface
+* Rendering a nutrition section when the nutrition extension is implemented
 * Sending user messages to the assistant backend
+* Sending nutrition diary entries, plan uploads, and report requests to backend endpoints
 * Displaying responses, errors, loading states, and basic activity summaries
+* Displaying nutrition adherence summaries without performing backend analysis in the browser
 * Displaying assistant-reported token usage counters for the current chat
 * Keeping browser side logic simple
 
@@ -98,6 +149,7 @@ The frontend must not:
 * Call Garmin Connect directly
 * Store Garmin credentials
 * Perform training analytics that belong in backend services
+* Perform nutrition-plan parsing, adherence analysis, or model calls that belong in backend services
 * Call OCI Enterprise AI directly
 
 ### 6.2 Assistant backend
@@ -107,9 +159,11 @@ The assistant backend is responsible for:
 * Receiving user questions from the frontend
 * Deciding what Garmin data is needed
 * Exposing model tools that call the local Python training data provider
+* Exposing nutrition-plan and diary workflows when the nutrition extension is implemented
 * Constructing model requests using the Responses API
 * Calling OCI Enterprise AI with model `openai.gpt-5.4`
 * Returning grounded answers to the frontend
+* Returning nutrition adherence reports with clear limits and source descriptions
 * Returning Responses API token usage summaries when available
 * Handling assistant level errors and response shaping
 
@@ -118,6 +172,7 @@ The assistant backend must not:
 * Store Garmin credentials outside environment variables or mounted secret files
 * Let the frontend access Garmin Connect or training provider code directly
 * Introduce MCP server dependencies in the initial version
+* Give prescriptive medical or nutrition advice in place of a qualified professional
 
 ### 6.3 Garmin data access layer
 
@@ -132,6 +187,32 @@ The Garmin data access layer is responsible for:
 The assistant backend may use `TrainingDataProvider` through a narrow local
 adapter when executing model-selected tools. The frontend must never import or
 call Garmin Connect code directly.
+
+### 6.4 Nutrition plan and diary services
+
+The nutrition extension should be implemented behind explicit Python service
+boundaries. It should not be mixed into Garmin provider code.
+
+Nutrition services are responsible for:
+
+* Storing food diary entries entered by the user
+* Storing uploaded nutrition-plan documents and extracted text
+* Normalising the current plan into a structured local representation
+* Comparing diary entries against the current plan by week
+* Producing adherence summaries, deviations, uncertainties, and points of attention
+* Producing questions or discussion points to bring back to the nutritionist
+
+Nutrition services must not:
+
+* Claim to replace the nutritionist
+* Diagnose medical conditions
+* Prescribe calorie targets, macro targets, supplements, or diet changes unless they are explicitly present in the uploaded plan
+* Treat model-generated analysis as a clinical decision
+* Log raw diary entries, uploaded documents, or full nutrition prompts by default
+
+The initial nutrition implementation should prefer simple local persistence,
+such as SQLite, once persistence is formally introduced. A plain file store may
+be used only for early prototypes if the limitations are documented.
 
 ## 7. Initial container model
 
@@ -158,6 +239,11 @@ assistant_api -> OCI Enterprise AI endpoint
 The Garmin access layer is intentionally not represented as a separate
 container yet. Adding a standalone Garmin data API container would be an
 architectural change and must update this specification before implementation.
+
+The nutrition extension should initially run inside the assistant backend
+service behind local Python service boundaries. Adding a separate nutrition API
+container, document-processing worker, or database container is an architectural
+change and must update this specification before implementation.
 
 ## 8. Backend implementation approach
 
@@ -211,6 +297,50 @@ Provider responsibilities:
 The assistant backend must access Garmin data only through assistant tools and
 the local provider adapter. Tool calls are selected by the LLM through the
 Responses API; the frontend does not select or call tools directly.
+
+### 8.2 Nutrition domain services
+
+The nutrition extension should use cohesive Python modules with explicit
+interfaces. The initial domain model should be intentionally small:
+
+```python
+class NutritionDiaryRepository:
+    def create_entry(...):
+        ...
+
+    def list_entries(...):
+        ...
+
+
+class NutritionPlanRepository:
+    def save_plan_document(...):
+        ...
+
+    def get_current_plan(...):
+        ...
+
+
+class NutritionAnalysisService:
+    def analyze_weekly_adherence(...):
+        ...
+```
+
+Initial diary entries should support:
+
+* Date
+* Meal type, such as breakfast, lunch, dinner, snack, or other
+* Free-text food description
+* Optional notes
+* Optional tags
+
+The system should not require automatic calorie or macronutrient estimation in
+the first nutrition implementation. Such estimation may be added later only
+with explicit accuracy limits and tests.
+
+Nutrition-plan upload should support Markdown first and PDF as a planned
+format. PDF support must handle extraction failures gracefully and preserve the
+original uploaded document locally only when the configured storage policy
+allows it.
 
 ## 9. Suggested repository structure
 
@@ -292,6 +422,31 @@ that are not tied to one specific workout. When a question needs both workout
 context and daily heart-rate context, the assistant may call both
 `list_activities` and `get_heart_rates`.
 
+### 10.3 Nutrition analysis tools
+
+When the nutrition extension is implemented, nutrition analysis should be
+available through explicit backend services and, where useful, Responses API
+tools executed inside the assistant backend. The frontend should not call model
+tools directly.
+
+Initial nutrition tool capabilities may include:
+
+* `get_current_nutrition_plan`
+* `list_food_diary_entries`
+* `analyze_nutrition_adherence_week`
+
+The analysis output should include:
+
+* Week start and end dates
+* Diary coverage and missing days or meals
+* Observed adherence to explicit plan elements
+* Deviations from the current plan
+* Recurring patterns
+* Uncertainties caused by incomplete diary entries or unclear plan text
+* Points to discuss with the nutritionist
+
+The analysis output must avoid presenting model inferences as clinical facts.
+
 ## 11. Assistant backend contract, initial draft
 
 ### 11.1 Health check
@@ -360,6 +515,23 @@ The response is a `text/event-stream` stream of server-sent events. Initial even
 
 The frontend should treat `conversation_id` as stable across all events for the same assistant turn.
 
+### 11.4 Nutrition API, planned draft
+
+The nutrition extension may expose ordinary backend HTTP endpoints in addition
+to chat workflows. Initial endpoint candidates are:
+
+```text
+POST /nutrition/diary/entries
+GET /nutrition/diary/entries?begin_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+POST /nutrition/plans
+GET /nutrition/plans/current
+POST /nutrition/reports/weekly
+```
+
+Nutrition endpoints must use typed request and response schemas, validate date
+ranges, and return safe errors. File uploads must validate content type and
+size. Normal tests must not require live OCI access.
+
 ## 12. Generative AI integration
 
 The assistant backend must use OCI Enterprise AI.
@@ -376,9 +548,11 @@ The assistant backend should structure model calls so that:
 
 * The user question is preserved clearly
 * Retrieved Garmin data is included only as needed
+* Nutrition diary and plan data is included only as needed for the requested analysis
 * Large raw payloads are summarised or reduced before being sent to the model
 * Private data is handled carefully
 * Model errors produce useful application errors
+* Nutrition responses stay within adherence analysis and do not become medical prescriptions
 
 ## 13. Data access strategy
 
@@ -395,11 +569,16 @@ Future iterations may add:
 
 * Local caching
 * Precomputed training summaries
+* Local nutrition-plan and food-diary persistence
 * Embeddings or searchable summaries
 * User controlled data retention
 * Background sync jobs
 
 These are not required in the initial version.
+
+For the nutrition extension, the assistant should retrieve only the current
+plan and diary entries for the requested analysis window. Weekly reports should
+prefer compact structured summaries over raw full-document prompts.
 
 ## 14. Configuration
 
@@ -417,20 +596,28 @@ Likely configuration values:
 * OCI model identifier, default `openai.gpt-5.4`
 * Assistant API URL for the frontend
 * Log level
+* Nutrition storage path, when the nutrition extension is implemented
+* Nutrition upload size limit, when document upload is implemented
+* Nutrition document retention policy, when document upload is implemented
 
 Secrets must not be committed to the repository.
 
 ## 15. Security and privacy requirements
 
-Training data must be treated as sensitive personal data.
+Training data and nutrition data must be treated as sensitive personal data.
 
 Requirements:
 
 * Do not commit credentials
 * Do not log raw Garmin payloads by default
+* Do not log raw food diary entries or uploaded nutrition-plan documents by default
 * Do not log full prompts containing detailed personal activity data by default
+* Do not log full prompts containing detailed nutrition data by default
 * Redact tokens and passwords from logs
 * Keep Garmin Connect access inside backend code and away from the frontend
+* Keep nutrition-plan parsing and adherence analysis inside backend code and away from the frontend
+* Store uploaded nutrition documents and extracted text only according to the configured retention policy
+* Allow future deletion/export workflows to be added without changing public contracts unnecessarily
 * Use least privilege configuration where possible
 
 ## 16. Testing strategy
@@ -441,9 +628,13 @@ Python test categories:
 
 * Unit tests for date range parsing and assistant orchestration logic
 * Unit tests for Garmin response normalisation
+* Unit tests for nutrition diary validation and weekly adherence analysis
+* Unit tests for nutrition-plan text extraction and parsing when document upload is implemented
 * HTTP tests for service endpoints
 * Contract tests for assistant backend to Garmin API interactions using mocks
+* Contract tests for nutrition endpoints using local fixtures
 * Error handling tests for Garmin failures and OCI failures
+* Error handling tests for malformed nutrition uploads and incomplete diary data
 
 Tests must not require live Garmin Connect or live OCI access during normal execution.
 
@@ -476,9 +667,11 @@ Errors should be explicit and actionable.
 Examples:
 
 * Garmin authentication failure should return a clear service error
+* Nutrition-plan upload or parsing failure should return a clear service error
 * Garmin unavailable should not crash the assistant backend
 * OCI model failure should return a graceful assistant error
 * Invalid user input should return a validation error
+* Unsupported nutrition document formats should return a validation error
 * Unexpected errors should be logged with safe metadata only
 
 ## 19. Observability
@@ -559,6 +752,20 @@ Deliver:
 * Health checks
 * Basic README instructions
 
+### Milestone 6, nutrition adherence extension
+
+Deliver:
+
+* Specification update for final nutrition storage and retention decisions
+* Nutrition section in the Next.js frontend
+* Food diary entry creation and listing
+* Markdown nutrition-plan upload
+* PDF nutrition-plan upload when extraction requirements are confirmed
+* Local nutrition persistence
+* Weekly adherence report
+* Safe model prompts that include only required nutrition context
+* Tests with local fixtures and mocked model calls
+
 ## 22. Open questions
 
 These questions should be resolved before or during implementation:
@@ -568,6 +775,12 @@ These questions should be resolved before or during implementation:
 * Which OCI region should be used as the default development region?
 * Should the assistant keep conversation history locally, and if so, where?
 * Which activity types should be prioritised first, running, cycling, swimming, strength, or all available activities?
+* Should nutrition data use SQLite as the first persistent store?
+* Should uploaded nutrition-plan originals be retained, or should only extracted text and structured summaries be stored?
+* What maximum upload size should be allowed for nutrition documents?
+* Which PDF extraction library should be used?
+* Should food diary entries support photos in a later iteration?
+* Should nutrition reports be generated only on demand, or cached locally?
 
 ## 23. Change control
 
@@ -579,6 +792,8 @@ Examples of architectural changes:
 * Adding a cache
 * Adding an MCP server
 * Adding a background worker
+* Adding nutrition document storage or changing its retention policy
+* Adding autonomous nutrition recommendation capabilities
 * Allowing the assistant backend to access Garmin Connect directly
 * Exposing Garmin Connect access to the frontend
 * Changing the model provider or model identifier
