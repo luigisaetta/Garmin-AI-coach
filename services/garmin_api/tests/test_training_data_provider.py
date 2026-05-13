@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
@@ -233,6 +233,55 @@ def test_list_activities_masks_pii_fields_from_activity_payloads() -> None:
     ]
     assert raw_activity["userRoles"] == ["ROLE_CONNECTUSER", "SCOPE_CONNECT_READ"]
     assert raw_activity["ownerFullName"] == "Luigi Saetta"
+
+
+def test_list_activities_rounds_float_values_without_mutating_source() -> None:
+    """Verify that verbose Garmin float values are compacted in provider output."""
+    raw_activity = {
+        "activityId": 123,
+        "distance": 10000.123456789,
+        "averageSpeed": 3.456789,
+        "movingDuration": 3123,
+        "isParent": False,
+        "gps": {
+            "elevationGain": 42.987654321,
+            "samples": [1.234567, 2, True, None, "3.14159265"],
+        },
+        "laps": [
+            {
+                "lapIndex": 1,
+                "averageRunCadence": 171.9999999,
+                "beginLatitude": 45.123456789,
+            }
+        ],
+    }
+    provider = TrainingDataProvider(client=FakeGarminClient([raw_activity]))
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [
+        {
+            "activityId": 123,
+            "distance": 10000.1235,
+            "averageSpeed": 3.4568,
+            "movingDuration": 3123,
+            "isParent": False,
+            "gps": {
+                "elevationGain": 42.9877,
+                "samples": [1.2346, 2, True, None, "3.14159265"],
+            },
+            "laps": [
+                {
+                    "lapIndex": 1,
+                    "averageRunCadence": 172.0,
+                    "beginLatitude": "*****",
+                }
+            ],
+        }
+    ]
+    assert raw_activity["distance"] == 10000.123456789
+    assert raw_activity["gps"]["samples"] == [1.234567, 2, True, None, "3.14159265"]
+    assert raw_activity["laps"][0]["beginLatitude"] == 45.123456789
 
 
 def test_list_activities_can_return_unredacted_payloads_when_disabled() -> None:

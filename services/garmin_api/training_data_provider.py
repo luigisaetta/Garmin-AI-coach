@@ -1,12 +1,13 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
+import math
 import os
 from pathlib import Path
 from typing import Any, Protocol
@@ -44,6 +45,7 @@ PII_KEY_FRAGMENTS = (
 )
 BOOLEAN_TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 BOOLEAN_FALSE_VALUES = frozenset({"0", "false", "no", "n", "off"})
+MAX_FLOAT_DECIMAL_PLACES = 4
 
 
 class GarminConnectClient(Protocol):
@@ -292,8 +294,8 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
 
         Returns:
             A sanitized copy of the supplied value. Dictionaries and lists are
-            copied recursively; scalar values are returned unchanged unless they
-            are associated with a redacted key.
+            copied recursively; float values are rounded to the provider's
+            configured precision unless they are associated with a redacted key.
         """
         if isinstance(value, dict):
             return {
@@ -307,6 +309,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
 
         if isinstance(value, list):
             return [self._sanitize_activity(item) for item in value]
+
+        if isinstance(value, float) and math.isfinite(value):
+            return round(value, MAX_FLOAT_DECIMAL_PLACES)
 
         return value
 
