@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
@@ -215,3 +215,18 @@ def test_nutrition_analysis_prompt_does_not_force_italian() -> None:
     assert "Return a detailed report in Italian" not in NUTRITION_ANALYSIS_PROMPT
     assert "response_language" in NUTRITION_ANALYSIS_PROMPT
     assert "Period summary" in NUTRITION_ANALYSIS_PROMPT
+
+
+def test_nutrition_analysis_prompt_requires_quantitative_adherence_rubric() -> None:
+    """Verify the nutrition report includes scoped adherence scores."""
+    prompt = " ".join(NUTRITION_ANALYSIS_PROMPT.split())
+
+    assert "Quantitative adherence rubric" in prompt
+    assert "Plan adherence score" in prompt
+    assert "Meal structure match" in prompt
+    assert "Food choice alignment" in prompt
+    assert "Training-day alignment" in prompt
+    assert "Confidence in assessment" in prompt
+    assert "LLM-estimated adherence rubric" in prompt
+    assert 'Do not include "Consistency across days"' in prompt
+    assert '"Evidence completeness" as metrics' in prompt

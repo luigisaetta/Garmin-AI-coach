@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-05-13
+
+### Added
+
+- Added a final quantitative adherence rubric to nutrition analysis reports with 1 to 10 LLM-estimated scores for plan adherence, meal structure match, food choice alignment, training-day alignment, and assessment confidence.
+
+### Changed
+
+- Rounded finite floating-point Garmin provider payload values to a fixed maximum precision before exposing sanitized activity data.
+- Updated chat token usage aggregation to include token usage reported by tool outputs, including the nutrition analysis subagent.
+
+### Verified
+
+- Python tests, formatting, and linting pass for the affected provider, assistant orchestration, and nutrition analysis modules.
+
 ## 2026-05-12
 
 ### Added

@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
@@ -56,6 +56,20 @@ Return a detailed report with these sections:
 6. Points of attention
 7. Improvement opportunities
 8. Questions to bring to the nutritionist
+
+End every report with a clearly separated section titled
+"Quantitative adherence rubric". In that section, provide these 1 to 10 scores:
+- Plan adherence score
+- Meal structure match
+- Food choice alignment
+- Training-day alignment
+- Confidence in assessment
+
+For each score, include one short evidence-based sentence explaining the rating.
+The scores are an LLM-estimated adherence rubric, not a clinical or nutritional
+assessment. Base them only on explicit plan text, diary entries, and available
+training context. Do not include "Consistency across days" or "Evidence
+completeness" as metrics.
 """.strip()
 
 
