@@ -1,11 +1,12 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -109,6 +110,7 @@ class AssistantOrchestrator:
             function_calls=function_calls,
             tool_runner=self._tool_runner,
         )
+        tool_token_usage = tool_outputs_token_usage(tool_outputs)
         LOGGER.info("tool execution done conversation_id=%s", conversation_id)
         LOGGER.info("responses final request conversation_id=%s", conversation_id)
         final_response = self._inference_client.responses.create(
@@ -127,6 +129,7 @@ class AssistantOrchestrator:
             data_sources=tool_data_sources(function_calls),
             token_usage=combine_token_usage(
                 response_token_usage(initial_response),
+                tool_token_usage,
                 response_token_usage(final_response),
             ),
         )
@@ -134,7 +137,6 @@ class AssistantOrchestrator:
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
         """Stream the final model answer through Responses API streaming."""
         conversation_id = request.conversation_id or str(uuid4())
-        data_sources: list[DataSource] = []
         LOGGER.info(
             "chat stream start conversation_id=%s history_messages=%d message_length=%d",
             conversation_id,
@@ -160,11 +162,13 @@ class AssistantOrchestrator:
             len(function_calls),
         )
 
-        final_input, data_sources = await self._build_final_stream_input(
-            conversation_id=conversation_id,
-            model_input=model_input,
-            initial_response=initial_response,
-            function_calls=function_calls,
+        final_input, data_sources, tool_token_usage = (
+            await self._build_final_stream_input(
+                conversation_id=conversation_id,
+                model_input=model_input,
+                initial_response=initial_response,
+                function_calls=function_calls,
+            )
         )
 
         LOGGER.info("responses stream request conversation_id=%s", conversation_id)
@@ -186,9 +190,8 @@ class AssistantOrchestrator:
                     )
 
             final_response = stream.get_final_response()
-            completed_text = str(_get_event_value(final_response, "output_text") or "")
-            if completed_text:
-                answer = completed_text
+            if _get_event_value(final_response, "output_text"):
+                answer = str(_get_event_value(final_response, "output_text"))
 
         LOGGER.info(
             "responses stream done conversation_id=%s answer_length=%d",
@@ -202,6 +205,7 @@ class AssistantOrchestrator:
             data_sources=data_sources,
             token_usage=combine_token_usage(
                 response_token_usage(initial_response),
+                tool_token_usage,
                 response_token_usage(final_response),
             ),
         )
@@ -213,26 +217,31 @@ class AssistantOrchestrator:
         model_input: list[dict[str, str]],
         initial_response: Any,
         function_calls: list[Any],
-    ) -> tuple[list[dict[str, Any]], list[DataSource]]:
+    ) -> tuple[list[dict[str, Any]], list[DataSource], TokenUsage | None]:
         """Build the final streamed model input, executing tools when needed."""
         if not function_calls:
             LOGGER.info(
                 "responses stream replays no-tool answer conversation_id=%s",
                 conversation_id,
             )
-            return model_input, []
+            return model_input, [], None
 
         LOGGER.info("tool execution start conversation_id=%s", conversation_id)
         tool_outputs = await build_tool_outputs(
             function_calls=function_calls,
             tool_runner=self._tool_runner,
         )
+        tool_token_usage = tool_outputs_token_usage(tool_outputs)
         LOGGER.info("tool execution done conversation_id=%s", conversation_id)
-        return [
-            *model_input,
-            *response_output_as_input(initial_response),
-            *tool_outputs,
-        ], tool_data_sources(function_calls)
+        return (
+            [
+                *model_input,
+                *response_output_as_input(initial_response),
+                *tool_outputs,
+            ],
+            tool_data_sources(function_calls),
+            tool_token_usage,
+        )
 
     @staticmethod
     def _extract_stream_delta(event: Any) -> str:
@@ -290,6 +299,38 @@ def response_token_usage(response: Any) -> TokenUsage | None:
         output_tokens=output_tokens,
         total_tokens=total_tokens,
     )
+
+
+def tool_outputs_token_usage(tool_outputs: list[dict[str, str]]) -> TokenUsage | None:
+    """Extract token usage reported by tool outputs, such as nutrition analysis."""
+    usages: list[TokenUsage] = []
+
+    for tool_output in tool_outputs:
+        raw_output = tool_output.get("output")
+        if raw_output is None:
+            continue
+
+        try:
+            output = json.loads(raw_output)
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(output, dict):
+            continue
+
+        usage = output.get("token_usage")
+        if usage is None:
+            continue
+
+        usages.append(
+            TokenUsage(
+                input_tokens=_get_int_value(usage, "input_tokens"),
+                output_tokens=_get_int_value(usage, "output_tokens"),
+                total_tokens=_get_int_value(usage, "total_tokens"),
+            )
+        )
+
+    return combine_token_usage(*usages)
 
 
 def _get_int_value(item: Any, key: str) -> int:

@@ -1,10 +1,12 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-13
 License: MIT
 """
 
 from __future__ import annotations
+
+import json
 
 # pylint: disable=duplicate-code
 
@@ -14,11 +16,12 @@ from typing import Any
 
 import pytest
 
-from services.assistant_api.api.schemas import ChatRequest
+from services.assistant_api.api.schemas import ChatRequest, TokenUsage
 from services.assistant_api.nutrition.analysis import NutritionAnalysisResult
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
     AssistantSettings,
+    tool_outputs_token_usage,
 )
 
 
@@ -218,6 +221,11 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
             diary_entry_count=4,
             missing_diary_dates=[],
             training_day_count=3,
+            token_usage=TokenUsage(
+                input_tokens=300,
+                output_tokens=80,
+                total_tokens=380,
+            ),
         )
 
 
@@ -318,6 +326,39 @@ async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
     assert "analyze_nutrition_adherence_period" in {
         tool["name"] for tool in inference_client.responses.calls[0]["tools"]
     }
+    assert response.token_usage is not None
+    assert response.token_usage.input_tokens == 540
+    assert response.token_usage.output_tokens == 120
+    assert response.token_usage.total_tokens == 660
+
+
+def test_tool_outputs_token_usage_extracts_nested_tool_usage() -> None:
+    """Verify assistant totals include Responses calls made inside tools."""
+    usage = tool_outputs_token_usage(
+        [
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": json.dumps({"activities": []}),
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_2",
+                "output": json.dumps(
+                    {
+                        "report": "Nutrition report.",
+                        "token_usage": {
+                            "input_tokens": 300,
+                            "output_tokens": 80,
+                            "total_tokens": 380,
+                        },
+                    }
+                ),
+            },
+        ]
+    )
+
+    assert usage == TokenUsage(input_tokens=300, output_tokens=80, total_tokens=380)
 
 
 @pytest.mark.anyio
