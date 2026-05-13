@@ -42,29 +42,7 @@ docs/specs/personal_ai_garmin_assistant_spec.md
 The initial architecture is composed of two runnable services and a local
 Python Garmin data access layer:
 
-```text
-Browser
-  |
-  v
-Next.js frontend
-  |
-  v
-Assistant backend, Python
-  |
-  | local Python tool calls
-  v
-TrainingDataProvider, Python
-  |
-  | Garmin Connect access
-  v
-Garmin Connect
-
-Assistant backend
-  |
-  | Responses API
-  v
-OCI Enterprise AI, model openai.gpt-5.4
-```
+![Garmin AI Coach architecture](images/architecture.png)
 
 ### Frontend Next.js
 
