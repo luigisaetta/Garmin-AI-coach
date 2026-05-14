@@ -447,6 +447,7 @@ async def _sse_events(
     user_id: int,
 ) -> AsyncIterator[str]:
     """Serialize assistant stream events as server-sent events."""
+    yield ": connected\n\n"
     try:
         async for event in orchestrator.stream_chat(request, user_id=user_id):
             payload = event.model_dump(exclude_none=True)

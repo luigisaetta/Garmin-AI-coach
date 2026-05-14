@@ -6,6 +6,7 @@ ENV PYTHONPATH=/app
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
+    cryptography \
     fastapi \
     garminconnect \
     openai \
