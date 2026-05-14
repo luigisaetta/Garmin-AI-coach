@@ -22,6 +22,9 @@ Build a web based personal AI assistant that can:
 * Use generative AI to answer interactive questions about workouts and training history
 * Present answers through a Next.js web interface
 * Run locally through Docker Compose on Ubuntu Linux
+* Support multiple authenticated local users, keeping each user's Garmin
+  credentials, training-derived context, nutrition diary entries, and nutrition
+  plans isolated from other users
 
 A later nutrition extension should allow the user to:
 
@@ -51,7 +54,6 @@ The initial version must not include:
 * An MCP server
 * Direct Garmin Connect access from the assistant backend
 * Direct Garmin Connect access from the frontend
-* Multi user account management
 * Cloud deployment automation
 * Complex distributed infrastructure
 * Live writeback to Garmin Connect
@@ -82,14 +84,17 @@ Browser
   v
 Next.js frontend
   |
+  | authenticated requests
   v
 Assistant backend, Python
   |
-  | local Python tool calls
+  | resolves current user
+  v
+User-scoped local Python tool calls
   v
 TrainingDataProvider, Python
   |
-  | Garmin Connect access
+  | Garmin Connect access with user-scoped credentials/session
   v
 Garmin Connect
 
@@ -129,12 +134,20 @@ The nutrition extension must not introduce an MCP server. The first persistence
 implementation uses SQLite inside the assistant backend service, with the
 database path configured by `NUTRITION_DB_PATH`.
 
+The next architectural evolution is multi-user operation. Authenticated
+requests must carry a backend-validated user identity. Backend services must use
+that identity to scope Garmin credential lookup, Garmin session storage,
+nutrition diary entries, nutrition plans, generated reports, and any future
+conversation or cache records.
+
 ## 6. Service responsibilities
 
 ### 6.1 Next.js frontend
 
 The frontend is responsible for:
 
+* Rendering login, logout, and authenticated session state when multi-user
+  support is enabled
 * Rendering the assistant chat interface
 * Rendering a nutrition section when the nutrition extension is implemented
 * Sending user messages to the assistant backend
@@ -148,6 +161,7 @@ The frontend must not:
 
 * Call Garmin Connect directly
 * Store Garmin credentials
+* Trust a user-selected username in request bodies as an authorization boundary
 * Perform training analytics that belong in backend services
 * Perform nutrition-plan parsing, adherence analysis, or model calls that belong in backend services
 * Call OCI Enterprise AI directly
@@ -156,6 +170,8 @@ The frontend must not:
 
 The assistant backend is responsible for:
 
+* Authenticating users and resolving the current user for every protected
+  request
 * Receiving user questions from the frontend
 * Deciding what Garmin data is needed
 * Exposing model tools that call the local Python training data provider
@@ -169,7 +185,8 @@ The assistant backend is responsible for:
 
 The assistant backend must not:
 
-* Store Garmin credentials outside environment variables or mounted secret files
+* Store Garmin credentials in plaintext
+* Trust frontend-supplied usernames when selecting data or credentials
 * Let the frontend access Garmin Connect or training provider code directly
 * Introduce MCP server dependencies in the initial version
 * Give prescriptive medical or nutrition advice in place of a qualified professional
@@ -178,7 +195,8 @@ The assistant backend must not:
 
 The Garmin data access layer is responsible for:
 
-* Authenticating with Garmin Connect
+* Authenticating with Garmin Connect using credentials associated with the
+  current authenticated application user
 * Encapsulating Garmin Connect access in Python through `TrainingDataProvider`
 * Normalising Garmin data into stable internal response schemas
 * Handling Garmin specific errors, rate limits, and retries
@@ -188,6 +206,11 @@ The assistant backend may use `TrainingDataProvider` through a narrow local
 adapter when executing model-selected tools. The frontend must never import or
 call Garmin Connect code directly.
 
+In multi-user mode, provider construction must be mediated by a backend
+credential/session boundary. Assistant orchestration code must ask for training
+data for the current authenticated user; it must not pass raw Garmin usernames,
+passwords, or tokens through model tool arguments or prompts.
+
 ### 6.4 Nutrition plan and diary services
 
 The nutrition extension should be implemented behind explicit Python service
@@ -195,8 +218,9 @@ boundaries. It should not be mixed into Garmin provider code.
 
 Nutrition services are responsible for:
 
-* Storing food diary entries entered by the user
-* Storing uploaded nutrition-plan documents and extracted text
+* Storing food diary entries entered by the authenticated user
+* Storing uploaded nutrition-plan documents and extracted text for the
+  authenticated user
 * Normalising the current plan into a structured local representation
 * Comparing diary entries against the current plan by week
 * Producing adherence summaries, deviations, uncertainties, and points of attention
@@ -220,6 +244,62 @@ The initial nutrition-plan implementation stores one current plan. Uploading a
 new PDF replaces the previous current plan. The backend extracts all available
 text from the uploaded PDF and stores the extracted text plus metadata in
 SQLite. The original PDF file is not retained in the MVP.
+
+In multi-user mode, the "current plan" is per user. Uploading a nutrition plan
+must replace only the authenticated user's current plan. Nutrition endpoints
+must derive the user from the authenticated session or token and must not accept
+a free-form username in the request body as the authority for data ownership.
+
+### 6.5 Identity, accounts, and user-scoped data
+
+Multi-user support introduces an application user identity independent of
+Garmin Connect account identifiers.
+
+The first multi-user implementation should use a simple local identity model
+inside the assistant backend:
+
+* A stable internal `user_id` is the ownership key for persisted data.
+* A unique `username` identifies the local application account and may be used
+  for login and display.
+* Authentication state is established by the backend and carried by secure
+  HTTP-only browser cookies or an equivalent backend-validated bearer token.
+* Passwords, if local password authentication is used, must be stored only as
+  modern salted password hashes.
+* All protected backend endpoints must resolve the current user before reading
+  or writing data.
+
+The frontend may display the authenticated username, but data ownership must be
+enforced by backend `user_id`, not by client-supplied fields.
+
+Initial multi-user scope should remain local and small. OAuth/OIDC, user
+invitation workflows, password reset email, roles beyond ordinary users, and
+cloud identity-provider integration are future enhancements unless explicitly
+requested.
+
+### 6.6 Garmin credentials per user
+
+Garmin credentials and reusable Garmin session material must be scoped per
+authenticated application user.
+
+The first implementation should introduce a backend credential service or
+repository with these responsibilities:
+
+* Store one Garmin credential record per application user, unless multiple
+  Garmin accounts per user are explicitly added later.
+* Encrypt Garmin credentials at rest using a server-side key supplied through an
+  environment variable or mounted secret file.
+* Never expose Garmin passwords, tokens, or session files to the frontend.
+* Never include Garmin credentials or session tokens in model prompts, tool
+  arguments, logs, or frontend responses.
+* Keep Garmin session storage partitioned by stable `user_id`, for example
+  under a user-specific directory in the backend data volume.
+* Allow credentials to be replaced or removed for one user without affecting
+  other users.
+
+If encrypted local SQLite storage is used for the first multi-user iteration,
+the encryption key must not be stored in SQLite or committed to the repository.
+A future deployment may replace the local credential repository with a dedicated
+secret manager without changing assistant tool contracts.
 
 ## 7. Initial container model
 
@@ -298,8 +378,10 @@ class TrainingDataProvider:
 Provider responsibilities:
 
 * Own all direct calls to the `garminconnect` library
-* Authenticate with Garmin Connect using configuration supplied by environment variables or mounted secret files
-* Reuse Garmin session tokens from `GARMIN_SESSION_STORAGE_PATH` when configured, and save refreshed tokens there after credential login
+* Authenticate with Garmin Connect using credentials resolved for the current
+  authenticated application user
+* Reuse Garmin session tokens from a user-scoped session storage path when
+  configured, and save refreshed tokens there after credential login
 * Convert Garmin Connect responses into stable internal models before they are returned to assistant tools
 * Mask noisy or personal account and location fields that are not useful for coaching analysis, such as `userRoles`, owner metadata, profile image URLs, coordinates, and location names, before data can be passed toward the assistant or LLM context when `REDACT_PII` is enabled
 * Hide Garmin-specific response shapes, exceptions, retries, rate limits, and session handling from the rest of the application
@@ -324,10 +406,10 @@ class NutritionDiaryRepository:
 
 
 class NutritionPlanRepository:
-    def save_plan_document(...):
+    def save_plan_document(user_id, ...):
         ...
 
-    def get_current_plan(...):
+    def get_current_plan(user_id, ...):
         ...
 
 
@@ -337,7 +419,8 @@ class NutritionAnalysisService:
 ```
 
 The first nutrition analysis implementation is a linear Python subagent graph
-that accepts `begin_date` and `end_date` as input and runs these steps in order:
+that accepts the current authenticated `user_id`, `begin_date`, and `end_date`
+as input and runs these steps in order:
 
 1. `ReadNutritionPlanStep` reads the current uploaded nutrition plan from local
    persistence.
@@ -373,6 +456,10 @@ The first implemented API may store one entry per calendar day with the fields
 `entry_date`, `training_type`, `meals_text`, and `notes`. More structured meal
 types can be added later without moving Garmin or assistant orchestration code
 into the nutrition service.
+
+In multi-user mode, nutrition persistence must include a `user_id` ownership
+column on user-owned records. Repository methods should require `user_id`
+explicitly and should filter every read, update, and delete by that value.
 
 The system should not require automatic calorie or macronutrient estimation in
 the first nutrition implementation. Such estimation may be added later only
@@ -587,6 +674,11 @@ Nutrition endpoints must use typed request and response schemas, validate date
 ranges, and return safe errors. File uploads must validate content type and
 size. Normal tests must not require live OCI access.
 
+In multi-user mode, all nutrition endpoints are protected endpoints. The
+backend must derive the current user from authentication state and apply that
+user to every nutrition repository operation. Request bodies must not contain
+an authoritative `username` or `user_id` for ownership decisions.
+
 ## 12. Generative AI integration
 
 The assistant backend must use OCI Enterprise AI.
@@ -641,9 +733,10 @@ Configuration must come from environment variables or mounted secret files.
 
 Likely configuration values:
 
-* Garmin username or credential reference
-* Garmin password or credential reference
-* Garmin session storage path, if used
+* Local authentication/session secret
+* Password hashing configuration, if local password authentication is used
+* Garmin credential encryption key or mounted secret reference
+* Garmin session storage root path, if used
 * PII redaction flag, `REDACT_PII`, default enabled
 * OCI region, `REGION`
 * Generative AI API key, `GENAI_API_KEY`
@@ -657,6 +750,10 @@ Likely configuration values:
 
 Secrets must not be committed to the repository.
 
+Single-user Garmin username and password environment variables may remain
+temporarily available only as a backwards-compatible local development path.
+They must not be the primary mechanism for multi-user operation.
+
 ## 15. Security and privacy requirements
 
 Training data and nutrition data must be treated as sensitive personal data.
@@ -664,6 +761,8 @@ Training data and nutrition data must be treated as sensitive personal data.
 Requirements:
 
 * Do not commit credentials
+* Do not store local user passwords in plaintext
+* Do not store Garmin credentials in plaintext
 * Do not log raw Garmin payloads by default
 * Do not log raw food diary entries or uploaded nutrition-plan documents by default
 * Do not log full prompts containing detailed personal activity data by default
@@ -671,6 +770,10 @@ Requirements:
 * Redact tokens and passwords from logs
 * Keep Garmin Connect access inside backend code and away from the frontend
 * Keep nutrition-plan parsing and adherence analysis inside backend code and away from the frontend
+* Enforce data ownership in backend repositories and service methods, not in
+  frontend state
+* Prevent cross-user reads and writes for Garmin credentials, nutrition plans,
+  diary entries, generated reports, and future caches
 * Store uploaded nutrition documents and extracted text only according to the configured retention policy
 * Allow future deletion/export workflows to be added without changing public contracts unnecessarily
 * Use least privilege configuration where possible
@@ -688,6 +791,9 @@ Python test categories:
 * HTTP tests for service endpoints
 * Contract tests for assistant backend to Garmin API interactions using mocks
 * Contract tests for nutrition endpoints using local fixtures
+* Authentication and authorization tests for protected endpoints
+* Cross-user isolation tests for nutrition plans, diary entries, Garmin
+  credential lookup, and session storage path selection
 * Error handling tests for Garmin failures and OCI failures
 * Error handling tests for malformed nutrition uploads and incomplete diary data
 
@@ -721,6 +827,10 @@ Errors should be explicit and actionable.
 
 Examples:
 
+* Unauthenticated requests to protected endpoints should return a clear
+  authentication error
+* Authenticated requests for another user's resources should not reveal whether
+  those resources exist
 * Garmin authentication failure should return a clear service error
 * Nutrition-plan upload or parsing failure should return a clear service error
 * Garmin unavailable should not crash the assistant backend
@@ -821,6 +931,22 @@ Deliver:
 * Safe model prompts that include only required nutrition context
 * Tests with local fixtures and mocked model calls
 
+### Milestone 7, multi-user foundation
+
+Deliver:
+
+* Detailed migration plan in `docs/migration_multi_user/README.md`
+* Local application user model with stable `user_id` and unique `username`
+* Authentication flow for login, logout, and current-user resolution
+* Backend enforcement of authenticated user identity on chat and nutrition
+  endpoints
+* User-scoped nutrition diary and nutrition-plan persistence
+* User-scoped Garmin credential repository with encrypted at-rest storage
+* User-scoped Garmin session storage
+* Migration path from the current single-user nutrition storage to per-user
+  records, if existing data must be preserved
+* Tests for authentication, authorization, and cross-user isolation
+
 ## 22. Open questions
 
 These questions should be resolved before or during implementation:
@@ -835,6 +961,19 @@ These questions should be resolved before or during implementation:
 * Which PDF extraction library should be used?
 * Should food diary entries support photos in a later iteration?
 * Should nutrition reports be generated only on demand, or cached locally?
+* Should the first multi-user authentication mechanism be local
+  username/password, reverse-proxy authentication, or an external OIDC provider?
+* What password policy and session lifetime should be used for local accounts?
+* How should the first admin or initial user be created in local Docker Compose
+  deployments?
+* Should existing single-user nutrition data be migrated to a chosen initial
+  user, or should multi-user setup start with an empty database?
+* Which encryption library should be used for Garmin credential storage?
+* How should Garmin credentials be entered, rotated, and deleted by each user?
+* Should each user have exactly one Garmin account, or should multiple Garmin
+  accounts per application user be supported later?
+* Should conversations and token usage be stored per user, or remain browser
+  session state only?
 
 ## 23. Change control
 
@@ -844,6 +983,8 @@ Examples of architectural changes:
 
 * Adding a database
 * Adding a cache
+* Adding multi-user authentication or authorization
+* Adding a credential store for per-user Garmin secrets
 * Adding an MCP server
 * Adding a background worker
 * Adding nutrition document storage or changing its retention policy
