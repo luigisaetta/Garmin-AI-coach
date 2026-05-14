@@ -1,4 +1,17 @@
 services:
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      frontend:
+        condition: service_started
+      assistant_api:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    volumes:
+      - ./deployment/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deployment/nginx/auth:/etc/nginx/auth:ro
+
   assistant_api:
     build:
       context: .
@@ -12,9 +25,8 @@ services:
       REGION: ${REGION:-}
       OCI_MODEL_ID: ${OCI_MODEL_ID:-openai.gpt-5.4}
       NUTRITION_DB_PATH: ${NUTRITION_DB_PATH:-/data/garmin_ai_coach.db}
+      APP_DB_PATH: ${APP_DB_PATH:-/data/garmin_ai_coach.db}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "${ASSISTANT_API_PORT:-8000}:8000"
     volumes:
       - garmin-session:/app/.garmin
       - assistant-data:/data
@@ -29,8 +41,6 @@ services:
     depends_on:
       assistant_api:
         condition: service_healthy
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
 
 volumes:
   garmin-session:

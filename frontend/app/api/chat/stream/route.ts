@@ -5,6 +5,8 @@
  * License: MIT
  */
 
+import { buildBackendHeaders } from "../_lib/authHeaders";
+
 const ASSISTANT_API_URL =
   process.env.ASSISTANT_API_URL ??
   process.env.NEXT_PUBLIC_ASSISTANT_API_URL ??
@@ -17,9 +19,9 @@ export async function POST(request: Request) {
   const body = await request.text();
   const response = await fetch(`${ASSISTANT_API_URL}/chat/stream`, {
     method: "POST",
-    headers: {
+    headers: buildBackendHeaders(request, {
       "Content-Type": "application/json",
-    },
+    }),
     body,
   });
 

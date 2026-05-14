@@ -107,6 +107,7 @@ Once Python services are scaffolded, prefer running checks from each service dir
 
 The current Docker Compose runtime is:
 
+- `nginx`, the browser-facing reverse proxy with Basic Authentication
 - `frontend`, a Next.js web application
 - `assistant_api`, a Python assistant backend that uses the local `TrainingDataProvider`
 
@@ -116,7 +117,17 @@ Create a local `.env` file first:
 cp .env.example .env
 ```
 
-Fill in private Garmin and OCI values, then start the stack:
+Fill in private Garmin and OCI values, then create the first local user:
+
+```bash
+docker compose build assistant_api
+./scripts/create_basic_auth_user.sh alice "Alice Runner"
+```
+
+The script updates `deployment/nginx/auth/.htpasswd` and ensures a matching
+row exists in the SQLite `users` table. It creates one user per run.
+
+Then start the stack:
 
 ```bash
 docker compose up --build
@@ -130,13 +141,8 @@ http://localhost:3000
 
 If port `3000` is already in use, set `FRONTEND_PORT=3001` in `.env` and open `http://localhost:3001` instead.
 
-The assistant backend is exposed for local debugging at:
-
-```text
-http://localhost:8000
-```
-
-Inside Docker, the frontend calls the backend through:
+The assistant backend is no longer exposed directly on the host in the
+multi-user deployment. Inside Docker, the frontend calls the backend through:
 
 ```text
 http://assistant_api:8000

@@ -7,6 +7,8 @@
 
 import { NextResponse } from "next/server";
 
+import { buildBackendHeaders } from "../../_lib/authHeaders";
+
 const ASSISTANT_API_URL =
   process.env.ASSISTANT_API_URL ??
   process.env.NEXT_PUBLIC_ASSISTANT_API_URL ??
@@ -21,6 +23,7 @@ export async function POST(request: Request) {
   try {
     const response = await fetch(`${ASSISTANT_API_URL}/nutrition/plan`, {
       method: "POST",
+      headers: buildBackendHeaders(request),
       body: formData,
     });
 

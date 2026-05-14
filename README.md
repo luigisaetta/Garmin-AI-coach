@@ -120,9 +120,23 @@ Create a local `.env` from `.env.example`, fill in private values, then run:
 docker compose up --build
 ```
 
-The frontend is exposed at `http://localhost:3000`. The assistant backend is exposed at `http://localhost:8000` for local debugging and is reached by the frontend inside Docker through `http://assistant_api:8000`.
+Create the first local Basic Auth user before starting the browser-facing
+stack:
 
-If one of those host ports is already in use, override `FRONTEND_PORT` or `ASSISTANT_API_PORT` in `.env`.
+```bash
+docker compose build assistant_api
+./scripts/create_basic_auth_user.sh alice "Alice Runner"
+```
+
+The script creates or updates one entry in `deployment/nginx/auth/.htpasswd`
+and one matching row in the SQLite `users` table. The username maps to a stable
+internal `user_id` that later multi-user steps use as the ownership key.
+
+The application is exposed through nginx at `http://localhost:3000`. The
+assistant backend is internal to Docker Compose and is reached by the frontend
+through `http://assistant_api:8000`.
+
+If the host port is already in use, override `FRONTEND_PORT` in `.env`.
 
 Nutrition diary entries and extracted nutrition-plan text are stored in SQLite
 at `NUTRITION_DB_PATH`. Docker Compose defaults this to
@@ -148,10 +162,10 @@ files.
 | `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
 | `NUTRITION_DB_PATH` | No | `assistant_api` | SQLite database path for nutrition diary persistence. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
+| `APP_DB_PATH` | No | provisioning script, future identity resolver | SQLite database path for local application users. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
 | `ASSISTANT_API_URL` | Yes for local frontend development | frontend route handlers | Backend URL used by the Next.js server when running outside Docker, usually `http://localhost:8000`. Docker Compose sets this internally to `http://assistant_api:8000`. |
 | `NEXT_PUBLIC_ASSISTANT_API_URL` | No | frontend route handlers | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets this internally to `http://assistant_api:8000`. |
-| `ASSISTANT_API_PORT` | No | Docker Compose | Host port mapped to the assistant backend. Defaults to `8000`. |
-| `FRONTEND_PORT` | No | Docker Compose | Host port mapped to the frontend. Defaults to `3000`. |
+| `FRONTEND_PORT` | No | Docker Compose | Host port mapped to nginx, which protects and proxies the frontend. Defaults to `3000`. |
 | `LOG_LEVEL` | No | `assistant_api` | Python logging level. Defaults to `INFO`. |
 
 ## Quickstart

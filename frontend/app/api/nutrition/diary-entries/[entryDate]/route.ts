@@ -7,6 +7,8 @@
 
 import { NextResponse } from "next/server";
 
+import { buildBackendHeaders } from "../../../_lib/authHeaders";
+
 const ASSISTANT_API_URL =
   process.env.ASSISTANT_API_URL ??
   process.env.NEXT_PUBLIC_ASSISTANT_API_URL ??
@@ -21,7 +23,7 @@ type RouteContext = {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { entryDate } = await context.params;
 
   try {
@@ -29,6 +31,7 @@ export async function GET(_request: Request, context: RouteContext) {
       `${ASSISTANT_API_URL}/nutrition/diary-entries/${entryDate}`,
       {
         cache: "no-store",
+        headers: buildBackendHeaders(request),
       },
     );
 
@@ -61,9 +64,9 @@ export async function PUT(request: Request, context: RouteContext) {
       `${ASSISTANT_API_URL}/nutrition/diary-entries/${entryDate}`,
       {
         method: "PUT",
-        headers: {
+        headers: buildBackendHeaders(request, {
           "Content-Type": "application/json",
-        },
+        }),
         body,
       },
     );

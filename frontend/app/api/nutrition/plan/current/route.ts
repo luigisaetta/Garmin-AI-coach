@@ -7,6 +7,8 @@
 
 import { NextResponse } from "next/server";
 
+import { buildBackendHeaders } from "../../../_lib/authHeaders";
+
 const ASSISTANT_API_URL =
   process.env.ASSISTANT_API_URL ??
   process.env.NEXT_PUBLIC_ASSISTANT_API_URL ??
@@ -15,10 +17,11 @@ const ASSISTANT_API_URL =
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const response = await fetch(`${ASSISTANT_API_URL}/nutrition/plan/current`, {
       cache: "no-store",
+      headers: buildBackendHeaders(request),
     });
 
     if (response.status === 404) {

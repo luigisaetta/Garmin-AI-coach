@@ -291,14 +291,15 @@ Recommended tests:
 ## Suggested Implementation Order
 
 1. Add NGINX Basic Auth and authenticated username forwarding.
-2. Add the local `users` table and backend current-user resolver.
-3. Protect chat and nutrition endpoints with current-user resolution.
-4. Add `user_id` to nutrition schema and migrate existing data.
-5. Update nutrition repositories and services to require `user_id`.
-6. Add encrypted Garmin credential storage per `user_id`.
-7. Add user-scoped Garmin session storage and provider construction.
-8. Add minimal frontend account/Garmin credential settings.
-9. Add cross-user isolation tests and update documentation.
+2. Add the local `users` table and provisioning script.
+3. Add the backend current-user resolver.
+4. Protect chat and nutrition endpoints with current-user resolution.
+5. Add `user_id` to nutrition schema and migrate existing data.
+6. Update nutrition repositories and services to require `user_id`.
+7. Add encrypted Garmin credential storage per `user_id`.
+8. Add user-scoped Garmin session storage and provider construction.
+9. Add minimal frontend account/Garmin credential settings.
+10. Add cross-user isolation tests and update documentation.
 
 This order keeps the migration incremental while reducing the risk of
 cross-user data leakage.
