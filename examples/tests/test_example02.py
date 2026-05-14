@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -93,6 +93,7 @@ async def test_build_tool_outputs_uses_model_tool_arguments() -> None:
     outputs = await build_tool_outputs(
         function_calls=[function_call],
         tool_runner=tool_runner,
+        user_id=1,
     )
 
     assert provider.calls == [
@@ -122,6 +123,7 @@ async def test_build_tool_outputs_returns_error_for_missing_required_dates() -> 
     outputs = await build_tool_outputs(
         function_calls=[function_call],
         tool_runner=tool_runner,
+        user_id=1,
     )
 
     assert not provider.calls

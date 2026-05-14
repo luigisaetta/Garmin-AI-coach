@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -69,6 +69,7 @@ async def run_analysis(args: argparse.Namespace) -> None:
         settings=NutritionAnalysisSettings(model_id=model_id),
     )
     result = await subagent.analyze(
+        user_id=1,
         begin_date=date.fromisoformat(args.begin_date),
         end_date=date.fromisoformat(args.end_date),
     )

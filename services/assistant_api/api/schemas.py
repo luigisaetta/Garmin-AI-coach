@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -69,6 +69,28 @@ class HealthResponse(BaseModel):
 
     status: Literal["ok"]
     service: Literal["assistant_api"]
+
+
+class GarminCredentialRequest(BaseModel):
+    """Request payload for saving Garmin Connect credentials."""
+
+    garmin_username: str = Field(min_length=1, max_length=320)
+    garmin_password: str = Field(min_length=1, max_length=1024)
+
+
+class GarminCredentialStatusResponse(BaseModel):
+    """Safe Garmin credential metadata returned to frontend clients."""
+
+    configured: bool
+    garmin_username: str | None = None
+    updated_at: datetime | None = None
+
+
+class GarminCredentialTestResponse(BaseModel):
+    """Result of testing the current user's stored Garmin credentials."""
+
+    ok: bool
+    message: str
 
 
 class NutritionDiaryEntryRequest(BaseModel):

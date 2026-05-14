@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -202,6 +202,7 @@ async def build_tool_outputs(
     *,
     function_calls: list[Any],
     tool_runner: "AssistantToolRunner",
+    user_id: int,
 ) -> list[dict[str, str]]:
     """Execute supported model-requested tool calls."""
     outputs: list[dict[str, str]] = []
@@ -211,7 +212,11 @@ async def build_tool_outputs(
         tool_name = str(_get_item_value(call, "name"))
         try:
             arguments = parse_tool_arguments(call)
-            output = await tool_runner.run_tool(tool_name, arguments)
+            output = await tool_runner.run_tool(
+                tool_name,
+                arguments,
+                user_id=user_id,
+            )
         except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             output = json.dumps({"error": str(exc)})
 
@@ -244,7 +249,13 @@ class AssistantToolRunner:
             return BASE_TOOLS
         return [*BASE_TOOLS, ANALYZE_NUTRITION_ADHERENCE_TOOL]
 
-    async def run_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
+    async def run_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        user_id: int,
+    ) -> str:
         """Run one model-selected tool by name.
 
         Args:
@@ -258,11 +269,14 @@ class AssistantToolRunner:
             ValueError: If the model requests an unsupported tool.
         """
         if tool_name == "list_activities":
-            return await self._run_list_activities(arguments)
+            return await self._run_list_activities({**arguments, "_user_id": user_id})
         if tool_name == "get_heart_rates":
-            return await self._run_get_heart_rates(arguments)
+            return await self._run_get_heart_rates({**arguments, "_user_id": user_id})
         if tool_name == "analyze_nutrition_adherence_period":
-            return await self._run_analyze_nutrition_adherence(arguments)
+            return await self._run_analyze_nutrition_adherence(
+                arguments,
+                user_id=user_id,
+            )
 
         raise ValueError(f"Unsupported tool requested: {tool_name}")
 
@@ -275,6 +289,7 @@ class AssistantToolRunner:
             arguments.get("activity_type") or "all",
         )
         activities = await self._training_client.list_activities(
+            user_id=arguments["_user_id"],
             begin_date=arguments["begin_date"],
             end_date=arguments["end_date"],
             activity_type=arguments.get("activity_type"),
@@ -290,6 +305,7 @@ class AssistantToolRunner:
             arguments.get("end_date"),
         )
         heart_rates = await self._training_client.get_heart_rates(
+            user_id=arguments["_user_id"],
             begin_date=arguments["begin_date"],
             end_date=arguments["end_date"],
         )
@@ -299,6 +315,8 @@ class AssistantToolRunner:
     async def _run_analyze_nutrition_adherence(
         self,
         arguments: dict[str, Any],
+        *,
+        user_id: int,
     ) -> str:
         """Run the nutrition analysis subagent tool."""
         if self._nutrition_analysis_agent is None:
@@ -312,6 +330,7 @@ class AssistantToolRunner:
             end_date,
         )
         result = await self._nutrition_analysis_agent.analyze(
+            user_id=user_id,
             begin_date=begin_date,
             end_date=end_date,
             response_language=arguments.get("response_language"),

@@ -7,6 +7,7 @@ dependencies:
   - nodejs
   - pip:
       - black
+      - cryptography
       - fastapi
       - garminconnect
       - httpx

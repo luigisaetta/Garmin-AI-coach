@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -103,6 +103,7 @@ class DailyTrainingSummary:
 class NutritionAnalysisContext:
     """Mutable state passed through the linear nutrition subagent graph."""
 
+    user_id: int
     begin_date: date
     end_date: date
     response_language: str | None = None
@@ -144,7 +145,7 @@ class ReadNutritionPlanStep:  # pylint: disable=too-few-public-methods
     async def run(self, context: NutritionAnalysisContext) -> NutritionAnalysisContext:
         """Read the active nutrition plan."""
         LOGGER.info("nutrition analysis step=read_plan start")
-        context.plan = self._plan_service.get_current_plan()
+        context.plan = self._plan_service.get_current_plan(user_id=context.user_id)
         if context.plan is None:
             raise NutritionAnalysisError("No current nutrition plan is available.")
 
@@ -170,6 +171,7 @@ class ReadDiaryEntriesStep:  # pylint: disable=too-few-public-methods
             context.end_date,
         )
         context.diary_entries = self._diary_service.list_entries(
+            user_id=context.user_id,
             begin_date=context.begin_date,
             end_date=context.end_date,
         )
@@ -201,6 +203,7 @@ class ReadTrainingActivitiesStep:  # pylint: disable=too-few-public-methods
             context.end_date,
         )
         activities = await self._training_client.list_activities(
+            user_id=context.user_id,
             begin_date=context.begin_date.isoformat(),
             end_date=context.end_date.isoformat(),
         )
@@ -291,6 +294,7 @@ class NutritionAnalysisSubAgent:
     async def analyze(
         self,
         *,
+        user_id: int,
         begin_date: date,
         end_date: date,
         response_language: str | None = None,
@@ -307,6 +311,7 @@ class NutritionAnalysisSubAgent:
             end_date,
         )
         context = NutritionAnalysisContext(
+            user_id=user_id,
             begin_date=begin_date,
             end_date=end_date,
             response_language=response_language,

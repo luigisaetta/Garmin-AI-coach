@@ -60,6 +60,8 @@ Expected configuration values include:
 GARMIN_USERNAME=
 GARMIN_PASSWORD=
 GARMIN_SESSION_STORAGE_PATH=.garmin/tokens
+GARMIN_CREDENTIAL_ENCRYPTION_KEY=
+GARMIN_SESSION_STORAGE_ROOT=/data/garmin-sessions
 REDACT_PII=true
 GENAI_API_KEY=
 REGION=
@@ -77,9 +79,11 @@ Configuration reference:
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GARMIN_USERNAME` | Yes for live Garmin access | Garmin Connect account username used by the local training data provider. |
-| `GARMIN_PASSWORD` | Yes for live Garmin access | Garmin Connect account password used by the local training data provider. |
-| `GARMIN_SESSION_STORAGE_PATH` | Recommended | Local path for Garmin session token reuse. Use `.garmin/tokens` for local scripts. Docker Compose stores tokens in the `garmin-session` volume at `/app/.garmin/tokens`. |
+| `GARMIN_USERNAME` | Only for legacy local scripts | Garmin Connect account username used by the legacy single-user local training data provider path. |
+| `GARMIN_PASSWORD` | Only for legacy local scripts | Garmin Connect account password used by the legacy single-user local training data provider path. |
+| `GARMIN_SESSION_STORAGE_PATH` | Only for legacy local scripts | Local path for Garmin session token reuse in the legacy single-user provider path. |
+| `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | Fernet key used by the assistant backend to encrypt per-user Garmin credentials in SQLite. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `GARMIN_SESSION_STORAGE_ROOT` | Recommended | Root directory for user-scoped Garmin session tokens. Docker Compose defaults this to `/data/garmin-sessions`. |
 | `REDACT_PII` | No | Redacts account, owner, profile, location, and coordinate-like fields before data can move toward assistant context. Keep this set to `true` unless explicitly debugging sanitized provider behaviour. |
 | `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
@@ -126,6 +130,12 @@ docker compose build assistant_api
 
 The script updates `deployment/nginx/auth/.htpasswd` and ensures a matching
 row exists in the SQLite `users` table. It creates one user per run.
+
+Set `GARMIN_CREDENTIAL_ENCRYPTION_KEY` before saving Garmin credentials in the
+web app. After login, open `/account` to save, test, replace, or delete the
+Garmin credentials for the authenticated application user. The backend stores
+the Garmin password encrypted and keeps Garmin session tokens under
+`GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
 
 Then start the stack:
 

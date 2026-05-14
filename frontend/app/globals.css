@@ -832,6 +832,42 @@ textarea:disabled {
   box-shadow: 0 14px 28px rgba(130, 53, 31, 0.22);
 }
 
+.secondaryAction,
+.dangerAction,
+.sideLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.dangerAction {
+  border-color: color-mix(in srgb, var(--coral) 55%, var(--line));
+  color: var(--coral);
+}
+
+.sideLink {
+  width: 100%;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(247, 251, 248, 0.86);
+}
+
+.accountActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .previewList {
   display: grid;
   gap: 14px;

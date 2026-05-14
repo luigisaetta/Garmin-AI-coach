@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -69,7 +69,9 @@ class AssistantOrchestrator:
             nutrition_analysis_agent=nutrition_analysis_agent,
         )
 
-    async def complete_chat(self, request: ChatRequest) -> ChatResponse:
+    async def complete_chat(
+        self, request: ChatRequest, *, user_id: int
+    ) -> ChatResponse:
         """Return a complete chat answer for callers that do not stream."""
         conversation_id = request.conversation_id or str(uuid4())
         LOGGER.info(
@@ -109,6 +111,7 @@ class AssistantOrchestrator:
         tool_outputs = await build_tool_outputs(
             function_calls=function_calls,
             tool_runner=self._tool_runner,
+            user_id=user_id,
         )
         tool_token_usage = tool_outputs_token_usage(tool_outputs)
         LOGGER.info("tool execution done conversation_id=%s", conversation_id)
@@ -134,7 +137,12 @@ class AssistantOrchestrator:
             ),
         )
 
-    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
+    async def stream_chat(  # pylint: disable=too-many-locals
+        self,
+        request: ChatRequest,
+        *,
+        user_id: int,
+    ) -> AsyncIterator[ChatStreamEvent]:
         """Stream the final model answer through Responses API streaming."""
         conversation_id = request.conversation_id or str(uuid4())
         LOGGER.info(
@@ -168,6 +176,7 @@ class AssistantOrchestrator:
                 model_input=model_input,
                 initial_response=initial_response,
                 function_calls=function_calls,
+                user_id=user_id,
             )
         )
 
@@ -210,13 +219,14 @@ class AssistantOrchestrator:
             ),
         )
 
-    async def _build_final_stream_input(
+    async def _build_final_stream_input(  # pylint: disable=too-many-arguments
         self,
         *,
         conversation_id: str,
         model_input: list[dict[str, str]],
         initial_response: Any,
         function_calls: list[Any],
+        user_id: int,
     ) -> tuple[list[dict[str, Any]], list[DataSource], TokenUsage | None]:
         """Build the final streamed model input, executing tools when needed."""
         if not function_calls:
@@ -230,6 +240,7 @@ class AssistantOrchestrator:
         tool_outputs = await build_tool_outputs(
             function_calls=function_calls,
             tool_runner=self._tool_runner,
+            user_id=user_id,
         )
         tool_token_usage = tool_outputs_token_usage(tool_outputs)
         LOGGER.info("tool execution done conversation_id=%s", conversation_id)

@@ -110,7 +110,12 @@ The project now has a first working vertical slice:
 - Backend logging for request flow, model calls, tool execution, and stream completion.
 - Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.
 
-The current implementation is still an early local development version. It requires local environment configuration for OCI inference and Garmin credentials or session storage before live end-to-end coaching questions can use real Garmin data. The nutrition MVP stores daily entries and one current extracted nutrition plan locally, but period reads and adherence analysis are still future work.
+The current implementation is still an early local development version. It
+requires local environment configuration for OCI inference and a
+`GARMIN_CREDENTIAL_ENCRYPTION_KEY` before live end-to-end coaching questions can
+use real Garmin data. Garmin credentials are configured per authenticated user
+from the account page and are stored encrypted in local SQLite. The nutrition
+MVP stores daily entries and one current extracted nutrition plan locally.
 
 ## Local Docker Runtime
 
@@ -131,6 +136,10 @@ docker compose build assistant_api
 The script creates or updates one entry in `deployment/nginx/auth/.htpasswd`
 and one matching row in the SQLite `users` table. The username maps to a stable
 internal `user_id` that later multi-user steps use as the ownership key.
+
+After login, open `/account` to save, test, replace, or delete the current
+user's Garmin credentials. Garmin session tokens are stored in a user-specific
+directory under `GARMIN_SESSION_STORAGE_ROOT`.
 
 The application is exposed through nginx at `http://localhost:3000`. The
 assistant backend is internal to Docker Compose and is reached by the frontend
@@ -154,9 +163,11 @@ files.
 
 | Variable | Required | Used by | Description |
 | --- | --- | --- | --- |
-| `GARMIN_USERNAME` | Yes for live Garmin access | `assistant_api`, examples | Garmin Connect account username. |
-| `GARMIN_PASSWORD` | Yes for live Garmin access | `assistant_api`, examples | Garmin Connect account password. |
-| `GARMIN_SESSION_STORAGE_PATH` | Recommended | `assistant_api`, examples | Path where Garmin session tokens are reused and refreshed. Docker defaults this to `/app/.garmin/tokens`; local examples default to `.garmin/tokens`. |
+| `GARMIN_USERNAME` | Only for legacy local scripts | examples, fallback provider | Garmin Connect account username for the legacy single-user provider path. |
+| `GARMIN_PASSWORD` | Only for legacy local scripts | examples, fallback provider | Garmin Connect account password for the legacy single-user provider path. |
+| `GARMIN_SESSION_STORAGE_PATH` | Only for legacy local scripts | examples, fallback provider | Path where legacy single-user Garmin session tokens are reused and refreshed. |
+| `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | `assistant_api` | Fernet key used to encrypt per-user Garmin credentials in SQLite. |
+| `GARMIN_SESSION_STORAGE_ROOT` | Recommended | `assistant_api` | Root directory for user-scoped Garmin session token storage. Docker defaults this to `/data/garmin-sessions`. |
 | `REDACT_PII` | No | `assistant_api`, Garmin provider | Masks account, owner, location, coordinate, and profile fields before training data can move toward assistant context. Defaults to `true`. |
 | `GENAI_API_KEY` | Yes for model calls | `assistant_api`, examples | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |

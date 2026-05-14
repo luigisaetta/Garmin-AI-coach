@@ -126,6 +126,21 @@ Preserving existing data requires a deterministic migration:
 The safer schema target is to enforce user ownership in the database, not only
 in Python service code.
 
+The local migration script for this step is:
+
+```bash
+python -m services.assistant_api.identity.migrate_user_ids \
+  --db-path /data/garmin_ai_coach.db \
+  --initial-username alice \
+  --display-name "Alice Runner"
+```
+
+The script ensures the local application user exists, rebuilds the current
+single-user nutrition tables with `user_id NOT NULL`, backfills existing diary
+and current-plan rows to the initial user, and creates user-scoped indexes.
+Run it after provisioning the initial Basic Auth user and before updating the
+backend repositories to require `user_id`.
+
 ## Nutrition Schema Changes
 
 Nutrition persistence must become user-scoped.
@@ -159,6 +174,11 @@ responsibilities:
 For a local MVP, SQLite plus encrypted values is acceptable. A future deployment
 may replace this repository with a secret manager without changing assistant
 tool contracts.
+
+The implemented local MVP stores one Garmin credential row per `user_id` in
+SQLite. The Garmin password is encrypted with Fernet using
+`GARMIN_CREDENTIAL_ENCRYPTION_KEY` or `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`.
+Only safe status metadata is returned to frontend clients.
 
 ## Credential Encryption
 
@@ -198,6 +218,9 @@ The provider construction path should resolve the current authenticated user,
 load that user's Garmin credential record, and pass a user-specific session
 storage path into `TrainingDataProvider`.
 
+The implemented default root is `GARMIN_SESSION_STORAGE_ROOT`, which Docker
+Compose sets to `/data/garmin-sessions`.
+
 Assistant orchestration must not pass raw Garmin usernames, passwords, tokens,
 or session paths through model tool arguments.
 
@@ -211,6 +234,9 @@ Initial capabilities:
 * Save or replace Garmin credentials.
 * Test Garmin login with the stored credentials.
 * Delete stored Garmin credentials.
+
+The first UI surface is `/account`, backed by ordinary Next.js API proxy routes
+under `/api/account/garmin-credentials`.
 
 API responses must never include the stored Garmin password or decrypted secret
 values.

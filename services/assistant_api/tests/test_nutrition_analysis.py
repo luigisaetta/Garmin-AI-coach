@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -24,6 +24,7 @@ from services.assistant_api.nutrition.diary import (
     NutritionDiaryService,
 )
 from services.assistant_api.nutrition.plan import NutritionPlanService
+from services.assistant_api.identity.users import UserRepository
 
 
 class FakeResponses:
@@ -66,6 +67,7 @@ class FakeTrainingClient:
     async def list_activities(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
         activity_type: str | None = None,
@@ -76,6 +78,7 @@ class FakeTrainingClient:
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "activity_type": activity_type or "",
+                "user_id": str(user_id),
             }
         )
         return [
@@ -99,10 +102,12 @@ class FakeTrainingClient:
     async def get_heart_rates(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
         """Return no heart-rate data; unused by this subagent."""
+        _ = user_id
         return {"begin_date": {"begin_date": begin_date, "end_date": end_date}}
 
 
@@ -148,23 +153,26 @@ def test_nutrition_analysis_subagent_runs_linear_graph(tmp_path) -> None:
 async def _run_subagent_graph_assertions(tmp_path) -> None:
     """Run async subagent assertions without requiring pytest async plugins."""
     database_path = tmp_path / "nutrition.db"
+    user_id = UserRepository(database_path).ensure_user(username="alice").id
     plan_service = NutritionPlanService(
         database_path,
         text_extractor=lambda _: "Breakfast: oats. Lunch: rice and protein.",
     )
     plan_service.replace_current_plan(
+        user_id=user_id,
         original_filename="plan.pdf",
         content_type="application/pdf",
         pdf_bytes=b"plan",
     )
     diary_service = NutritionDiaryService(database_path)
     diary_service.upsert_entry(
-        NutritionDiaryEntryInput(
+        user_id=user_id,
+        entry_input=NutritionDiaryEntryInput(
             entry_date=date(2026, 5, 12),
             training_type="Run plus strength",
             meals_text="Breakfast: coffee. Lunch: salad. Dinner: pasta.",
             notes="Hungry after training.",
-        )
+        ),
     )
     training_client = FakeTrainingClient()
     inference_client = FakeInferenceClient()
@@ -177,6 +185,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
     )
 
     result = await subagent.analyze(
+        user_id=user_id,
         begin_date=date(2026, 5, 12),
         end_date=date(2026, 5, 13),
         response_language="italian",
@@ -194,6 +203,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
             "begin_date": "2026-05-12",
             "end_date": "2026-05-13",
             "activity_type": "",
+            "user_id": "1",
         }
     ]
     assert len(inference_client.responses.requests) == 1

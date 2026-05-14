@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -8,20 +8,30 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from services.assistant_api.api.main import (
     create_app,
+    get_current_user,
+    get_garmin_credential_repository,
     get_nutrition_diary_service,
     get_nutrition_plan_service,
     get_orchestrator,
+    get_training_data_provider_factory,
+    get_user_repository,
 )
 from services.assistant_api.api.schemas import (
     ChatRequest,
     ChatResponse,
     ChatStreamEvent,
 )
+from services.assistant_api.identity.garmin_credentials import (
+    GarminCredentialRepository,
+)
+from services.assistant_api.identity.users import ApplicationUser, UserRepository
 from services.assistant_api.nutrition.diary import NutritionDiaryService
 from services.assistant_api.nutrition.plan import NutritionPlanService
 
@@ -29,23 +39,31 @@ from services.assistant_api.nutrition.plan import NutritionPlanService
 class FakeOrchestrator:
     """Predictable orchestrator used by HTTP endpoint tests."""
 
-    async def complete_chat(self, request: ChatRequest) -> ChatResponse:
+    async def complete_chat(
+        self, request: ChatRequest, *, user_id: int
+    ) -> ChatResponse:
         """Return a deterministic non-streaming response."""
         return ChatResponse(
             answer=(
-                f"reply to {request.message} with {len(request.messages)} "
+                f"reply to {request.message} for user {user_id} "
+                f"with {len(request.messages)} "
                 "history message(s)"
             ),
             conversation_id=request.conversation_id or "generated-id",
         )
 
-    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
+    async def stream_chat(
+        self,
+        request: ChatRequest,
+        *,
+        user_id: int,
+    ) -> AsyncIterator[ChatStreamEvent]:
         """Return two deterministic events for streaming assertions."""
         conversation_id = request.conversation_id or "generated-id"
         yield ChatStreamEvent(
             type="message_delta",
             conversation_id=conversation_id,
-            delta="hello",
+            delta=f"hello user {user_id}",
         )
         yield ChatStreamEvent(
             type="message_done",
@@ -57,26 +75,57 @@ class FakeOrchestrator:
 class FailingOrchestrator:  # pylint: disable=too-few-public-methods
     """Orchestrator that simulates an unexpected streaming failure."""
 
-    async def stream_chat(self, request: ChatRequest) -> AsyncIterator[ChatStreamEvent]:
+    async def stream_chat(
+        self,
+        request: ChatRequest,
+        *,
+        user_id: int,
+    ) -> AsyncIterator[ChatStreamEvent]:
         """Raise a runtime error during SSE generation."""
+        _ = user_id
         if request.conversation_id == "__never__":
             yield ChatStreamEvent(type="message_delta", conversation_id="unused")
         raise RuntimeError("backend unavailable")
+
+
+class FakeTrainingProvider:  # pylint: disable=too-few-public-methods
+    """Fake Garmin provider used by credential test endpoints."""
+
+    calls: list[dict[str, str | None]] = []
+
+    def __init__(
+        self,
+        *,
+        username: str | None,
+        password: str | None,
+        session_storage_path: str | None,
+    ) -> None:
+        FakeTrainingProvider.calls.append(
+            {
+                "username": username,
+                "password": password,
+                "session_storage_path": session_storage_path,
+            }
+        )
 
 
 def build_client() -> TestClient:
     """Create a test client with network-dependent orchestration replaced."""
     app = create_app()
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = _fake_user
     return TestClient(app)
 
 
 def build_client_with_diary(tmp_path) -> TestClient:
     """Create a test client with a temporary nutrition diary database."""
     app = create_app()
+    database_path = tmp_path / "nutrition.db"
+    user = UserRepository(database_path).ensure_user(username="alice")
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
-    app.dependency_overrides[get_nutrition_diary_service] = lambda: (
-        NutritionDiaryService(tmp_path / "nutrition.db")
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_nutrition_diary_service] = (
+        lambda: NutritionDiaryService(database_path)
     )
     return TestClient(app)
 
@@ -84,14 +133,49 @@ def build_client_with_diary(tmp_path) -> TestClient:
 def build_client_with_plan(tmp_path) -> TestClient:
     """Create a test client with a temporary nutrition plan database."""
     app = create_app()
+    database_path = tmp_path / "nutrition.db"
+    user = UserRepository(database_path).ensure_user(username="alice")
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_nutrition_plan_service] = lambda: (
         NutritionPlanService(
-            tmp_path / "nutrition.db",
+            database_path,
             text_extractor=lambda pdf_bytes: pdf_bytes.decode("utf-8"),
         )
     )
     return TestClient(app)
+
+
+def build_client_with_garmin_credentials(tmp_path) -> TestClient:
+    """Create a test client with encrypted Garmin credential storage."""
+    app = create_app()
+    database_path = tmp_path / "account.db"
+    user = UserRepository(database_path).ensure_user(username="alice")
+    repository = GarminCredentialRepository(
+        database_path,
+        encryption_key=Fernet.generate_key(),
+    )
+    FakeTrainingProvider.calls.clear()
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_garmin_credential_repository] = lambda: repository
+    app.dependency_overrides[get_training_data_provider_factory] = (
+        lambda: FakeTrainingProvider
+    )
+    return TestClient(app)
+
+
+def _fake_user(user_id: int = 1, username: str = "alice") -> ApplicationUser:
+    """Create a current-user object for endpoint tests."""
+    now = datetime.now(UTC).replace(microsecond=0)
+    return ApplicationUser(
+        id=user_id,
+        username=username,
+        display_name=username,
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 def test_health_returns_service_status() -> None:
@@ -144,7 +228,7 @@ def test_chat_stream_returns_server_sent_events() -> None:
         {
             "type": "message_delta",
             "conversation_id": "conversation-1",
-            "delta": "hello",
+            "delta": "hello user 1",
             "data_sources": [],
         },
         {
@@ -165,10 +249,121 @@ def test_chat_rejects_empty_message() -> None:
     assert response.status_code == 422
 
 
+def test_chat_rejects_missing_authenticated_user_header(tmp_path) -> None:
+    """Verify protected backend routes require a resolved authenticated user."""
+    app = create_app()
+    repository = UserRepository(tmp_path / "nutrition.db")
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_user_repository] = lambda: repository
+    client = TestClient(app)
+
+    response = client.post("/chat", json={"message": "Summarise my week"})
+
+    assert response.status_code == 401
+
+
+def test_chat_rejects_unknown_authenticated_user(tmp_path) -> None:
+    """Verify unknown proxy-authenticated usernames are not accepted."""
+    app = create_app()
+    repository = UserRepository(tmp_path / "nutrition.db")
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_user_repository] = lambda: repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/chat",
+        json={"message": "Summarise my week"},
+        headers={"X-Authenticated-User": "missing"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_get_garmin_credential_status_returns_missing(tmp_path) -> None:
+    """Verify account clients can detect missing Garmin credentials."""
+    client = build_client_with_garmin_credentials(tmp_path)
+
+    response = client.get("/account/garmin-credentials")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "configured": False,
+        "garmin_username": None,
+        "updated_at": None,
+    }
+
+
+def test_save_garmin_credentials_returns_safe_status(tmp_path) -> None:
+    """Verify saving credentials does not return the stored password."""
+    client = build_client_with_garmin_credentials(tmp_path)
+
+    response = client.put(
+        "/account/garmin-credentials",
+        json={
+            "garmin_username": "alice@example.com",
+            "garmin_password": "super-secret",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["configured"] is True
+    assert body["garmin_username"] == "alice@example.com"
+    assert body["updated_at"]
+    assert "password" not in body
+
+
+def test_delete_garmin_credentials_removes_status(tmp_path) -> None:
+    """Verify users can delete their stored Garmin credentials."""
+    client = build_client_with_garmin_credentials(tmp_path)
+    client.put(
+        "/account/garmin-credentials",
+        json={
+            "garmin_username": "alice@example.com",
+            "garmin_password": "super-secret",
+        },
+    )
+
+    response = client.delete("/account/garmin-credentials")
+
+    assert response.status_code == 204
+    assert client.get("/account/garmin-credentials").json()["configured"] is False
+
+
+def test_garmin_credential_test_uses_stored_secret_without_returning_it(
+    tmp_path,
+) -> None:
+    """Verify credential testing initializes Garmin provider with user data."""
+    client = build_client_with_garmin_credentials(tmp_path)
+    client.put(
+        "/account/garmin-credentials",
+        json={
+            "garmin_username": "alice@example.com",
+            "garmin_password": "super-secret",
+        },
+    )
+
+    response = client.post("/account/garmin-credentials/test")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "message": "Garmin credentials are valid.",
+    }
+    assert FakeTrainingProvider.calls == [
+        {
+            "username": "alice@example.com",
+            "password": "super-secret",
+            "session_storage_path": "/data/garmin-sessions/1",
+        }
+    ]
+
+
 def test_chat_stream_returns_error_event_for_runtime_failure() -> None:
     """Verify stream errors are sent as SSE events instead of raw tracebacks."""
     app = create_app()
     app.dependency_overrides[get_orchestrator] = FailingOrchestrator
+    app.dependency_overrides[get_current_user] = _fake_user
     client = TestClient(app)
 
     with client.stream(

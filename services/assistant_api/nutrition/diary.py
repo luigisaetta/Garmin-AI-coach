@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -15,10 +15,11 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
-class NutritionDiaryEntry:
+class NutritionDiaryEntry:  # pylint: disable=too-many-instance-attributes
     """A stored food diary entry for one calendar day."""
 
     id: int
+    user_id: int
     entry_date: date
     training_type: str
     meals_text: str
@@ -47,6 +48,8 @@ class NutritionDiaryService:
 
     def upsert_entry(
         self,
+        *,
+        user_id: int,
         entry_input: NutritionDiaryEntryInput,
     ) -> NutritionDiaryEntry:
         """Create or update the diary entry for one day."""
@@ -55,6 +58,7 @@ class NutritionDiaryService:
             connection.execute(
                 """
                 INSERT INTO nutrition_diary_entries (
+                    user_id,
                     entry_date,
                     training_type,
                     meals_text,
@@ -62,14 +66,15 @@ class NutritionDiaryService:
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(entry_date) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, entry_date) DO UPDATE SET
                     training_type = excluded.training_type,
                     meals_text = excluded.meals_text,
                     notes = excluded.notes,
                     updated_at = excluded.updated_at
                 """,
                 (
+                    user_id,
                     entry_input.entry_date.isoformat(),
                     entry_input.training_type,
                     entry_input.meals_text,
@@ -79,18 +84,21 @@ class NutritionDiaryService:
                 ),
             )
 
-        entry = self.get_entry(entry_input.entry_date)
+        entry = self.get_entry(user_id=user_id, entry_date=entry_input.entry_date)
         if entry is None:
             raise RuntimeError("nutrition diary entry was not persisted")
         return entry
 
-    def get_entry(self, entry_date: date) -> NutritionDiaryEntry | None:
+    def get_entry(
+        self, *, user_id: int, entry_date: date
+    ) -> NutritionDiaryEntry | None:
         """Return the diary entry for one day, when present."""
         with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT
                     id,
+                    user_id,
                     entry_date,
                     training_type,
                     meals_text,
@@ -98,9 +106,9 @@ class NutritionDiaryService:
                     created_at,
                     updated_at
                 FROM nutrition_diary_entries
-                WHERE entry_date = ?
+                WHERE user_id = ? AND entry_date = ?
                 """,
-                (entry_date.isoformat(),),
+                (user_id, entry_date.isoformat()),
             ).fetchone()
 
         if row is None:
@@ -111,6 +119,7 @@ class NutritionDiaryService:
     def list_entries(
         self,
         *,
+        user_id: int,
         begin_date: date,
         end_date: date,
     ) -> list[NutritionDiaryEntry]:
@@ -123,6 +132,7 @@ class NutritionDiaryService:
                 """
                 SELECT
                     id,
+                    user_id,
                     entry_date,
                     training_type,
                     meals_text,
@@ -130,10 +140,10 @@ class NutritionDiaryService:
                     created_at,
                     updated_at
                 FROM nutrition_diary_entries
-                WHERE entry_date >= ? AND entry_date <= ?
+                WHERE user_id = ? AND entry_date >= ? AND entry_date <= ?
                 ORDER BY entry_date ASC
                 """,
-                (begin_date.isoformat(), end_date.isoformat()),
+                (user_id, begin_date.isoformat(), end_date.isoformat()),
             ).fetchall()
 
         return [_entry_from_row(row) for row in rows]
@@ -144,13 +154,23 @@ class NutritionDiaryService:
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS nutrition_diary_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entry_date TEXT NOT NULL UNIQUE,
+                    user_id INTEGER NOT NULL,
+                    entry_date TEXT NOT NULL,
                     training_type TEXT NOT NULL,
                     meals_text TEXT NOT NULL,
                     notes TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
                 )
+                """)
+            connection.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_diary_user_entry_date
+                ON nutrition_diary_entries(user_id, entry_date)
+                """)
+            connection.execute("""
+                CREATE INDEX IF NOT EXISTS idx_nutrition_diary_user_date_range
+                ON nutrition_diary_entries(user_id, entry_date)
                 """)
 
     def _connect(self) -> sqlite3.Connection:
@@ -165,6 +185,7 @@ def _entry_from_row(row: sqlite3.Row) -> NutritionDiaryEntry:
     """Convert a SQLite row to a typed diary entry."""
     return NutritionDiaryEntry(
         id=row["id"],
+        user_id=row["user_id"],
         entry_date=date.fromisoformat(row["entry_date"]),
         training_type=row["training_type"],
         meals_text=row["meals_text"],

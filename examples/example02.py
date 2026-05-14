@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -176,6 +176,7 @@ async def ask_with_optional_activity_tool(args: argparse.Namespace) -> str:
     tool_outputs = await build_tool_outputs(
         function_calls=function_calls,
         tool_runner=tool_runner,
+        user_id=1,
     )
     final_response = create_final_response(
         client=client,

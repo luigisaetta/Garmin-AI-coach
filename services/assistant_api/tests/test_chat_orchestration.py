@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -160,6 +160,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
     async def list_activities(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
         activity_type: str | None = None,
@@ -170,6 +171,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "activity_type": activity_type,
+                "user_id": str(user_id),
             }
         )
         return [{"activityId": 1, "activityName": "Run"}]
@@ -177,6 +179,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
     async def get_heart_rates(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
@@ -186,6 +189,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "activity_type": "heart_rate",
+                "user_id": str(user_id),
             }
         )
         return {begin_date: {"calendarDate": begin_date, "restingHeartRate": 48}}
@@ -201,6 +205,7 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
     async def analyze(
         self,
         *,
+        user_id: int,
         begin_date: date,
         end_date: date,
         response_language: str | None = None,
@@ -208,6 +213,7 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
         """Capture the requested period and return a deterministic report."""
         self.calls.append(
             {
+                "user_id": user_id,
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "response_language": response_language,
@@ -247,7 +253,8 @@ async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
             message="Summarise last week",
             messages=[],
             conversation_id="conversation-1",
-        )
+        ),
+        user_id=1,
     )
 
     assert response.answer == "You ran three times last week."
@@ -262,6 +269,7 @@ async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
             "begin_date": "2026-05-04",
             "end_date": "2026-05-10",
             "activity_type": None,
+            "user_id": "1",
         }
     ]
     assert len(inference_client.responses.calls) == 2
@@ -284,7 +292,10 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
         training_client=training_client,
     )
 
-    response = await orchestrator.complete_chat(ChatRequest(message="How was my HR?"))
+    response = await orchestrator.complete_chat(
+        ChatRequest(message="How was my HR?"),
+        user_id=1,
+    )
 
     assert response.data_sources[0].type == "garmin_heart_rate_range"
     assert training_client.calls == [
@@ -292,6 +303,7 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
             "begin_date": "2026-05-04",
             "end_date": "2026-05-10",
             "activity_type": "heart_rate",
+            "user_id": "1",
         }
     ]
 
@@ -312,12 +324,14 @@ async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
     )
 
     response = await orchestrator.complete_chat(
-        ChatRequest(message="Analizza l'aderenza nutrizionale della scorsa settimana")
+        ChatRequest(message="Analizza l'aderenza nutrizionale della scorsa settimana"),
+        user_id=42,
     )
 
     assert response.data_sources[0].type == "nutrition_adherence_analysis"
     assert nutrition_agent.calls == [
         {
+            "user_id": 42,
             "begin_date": date(2026, 5, 4),
             "end_date": date(2026, 5, 10),
             "response_language": "italian",
@@ -375,7 +389,8 @@ async def test_stream_chat_uses_responses_api_stream_for_final_answer() -> None:
     events = [
         event
         async for event in orchestrator.stream_chat(
-            ChatRequest(message="Summarise last week")
+            ChatRequest(message="Summarise last week"),
+            user_id=1,
         )
     ]
 

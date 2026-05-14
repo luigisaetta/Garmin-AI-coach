@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -33,6 +33,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
     async def list_activities(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
         activity_type: str | None = None,
@@ -43,6 +44,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "activity_type": activity_type,
+                "user_id": str(user_id),
             }
         )
         return [{"activityId": 123, "activityName": "Morning Run"}]
@@ -50,6 +52,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
     async def get_heart_rates(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
@@ -58,6 +61,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
             {
                 "begin_date": begin_date,
                 "end_date": end_date,
+                "user_id": str(user_id),
             }
         )
         return {
@@ -74,20 +78,24 @@ class FailingTrainingClient:  # pylint: disable=too-few-public-methods
     async def list_activities(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
         activity_type: str | None = None,
     ) -> list[dict[str, Any]]:
         """Raise a provider error."""
+        _ = (user_id, begin_date, end_date, activity_type)
         raise ValueError("Training data provider failed.")
 
     async def get_heart_rates(
         self,
         *,
+        user_id: int,
         begin_date: str,
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
         """Raise a provider error."""
+        _ = (user_id, begin_date, end_date)
         raise ValueError("Training data provider failed.")
 
 
@@ -101,6 +109,7 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
     async def analyze(
         self,
         *,
+        user_id: int,
         begin_date: date,
         end_date: date,
         response_language: str | None = None,
@@ -108,6 +117,7 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
         """Capture the requested period and return a deterministic report."""
         self.calls.append(
             {
+                "user_id": user_id,
                 "begin_date": begin_date,
                 "end_date": end_date,
                 "response_language": response_language,
@@ -199,6 +209,7 @@ async def test_build_tool_outputs_uses_model_extracted_activity_range() -> None:
     outputs = await responses_tools.build_tool_outputs(
         function_calls=[function_call],
         tool_runner=AssistantToolRunner(training_client),
+        user_id=1,
     )
 
     assert training_client.calls == [
@@ -206,6 +217,7 @@ async def test_build_tool_outputs_uses_model_extracted_activity_range() -> None:
             "begin_date": "2026-05-04",
             "end_date": "2026-05-10",
             "activity_type": "running",
+            "user_id": "1",
         }
     ]
     assert outputs[0]["type"] == "function_call_output"
@@ -227,12 +239,14 @@ async def test_build_tool_outputs_uses_model_extracted_heart_rate_range() -> Non
     outputs = await responses_tools.build_tool_outputs(
         function_calls=[function_call],
         tool_runner=AssistantToolRunner(training_client),
+        user_id=1,
     )
 
     assert training_client.heart_rate_calls == [
         {
             "begin_date": "2026-05-04",
             "end_date": "2026-05-05",
+            "user_id": "1",
         }
     ]
     assert outputs[0]["type"] == "function_call_output"
@@ -260,10 +274,12 @@ async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
             FakeTrainingClient(),
             nutrition_analysis_agent=nutrition_agent,
         ),
+        user_id=7,
     )
 
     assert nutrition_agent.calls == [
         {
+            "user_id": 7,
             "begin_date": date(2026, 5, 4),
             "end_date": date(2026, 5, 10),
             "response_language": "english",
@@ -294,6 +310,7 @@ async def test_build_tool_outputs_returns_error_for_missing_dates() -> None:
     outputs = await responses_tools.build_tool_outputs(
         function_calls=[function_call],
         tool_runner=AssistantToolRunner(training_client),
+        user_id=1,
     )
 
     assert not training_client.calls
@@ -342,7 +359,7 @@ async def test_tool_runner_rejects_unsupported_tools() -> None:
     runner = AssistantToolRunner(FakeTrainingClient())
 
     with pytest.raises(ValueError, match="Unsupported tool"):
-        await runner.run_tool("unknown_tool", {})
+        await runner.run_tool("unknown_tool", {}, user_id=1)
 
 
 @pytest.mark.anyio
@@ -358,6 +375,7 @@ async def test_build_tool_outputs_returns_error_when_training_provider_fails() -
     outputs = await responses_tools.build_tool_outputs(
         function_calls=[function_call],
         tool_runner=AssistantToolRunner(FailingTrainingClient()),
+        user_id=1,
     )
 
     assert outputs[0]["type"] == "function_call_output"

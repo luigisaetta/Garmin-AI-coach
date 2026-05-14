@@ -301,6 +301,12 @@ the encryption key must not be stored in SQLite or committed to the repository.
 A future deployment may replace the local credential repository with a dedicated
 secret manager without changing assistant tool contracts.
 
+The first local implementation uses SQLite for one Garmin credential record per
+application user and encrypts the Garmin password with Fernet. The Fernet key is
+provided through `GARMIN_CREDENTIAL_ENCRYPTION_KEY` or a mounted secret file
+referenced by `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`. User-scoped Garmin
+session tokens are stored under `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
+
 ## 7. Initial container model
 
 Docker Compose should define at least these services:
@@ -951,7 +957,6 @@ Deliver:
 
 These questions should be resolved before or during implementation:
 
-* Should Garmin sessions be stored on disk, and where inside the container volume?
 * Which Python web framework is selected for each backend service?
 * Which OCI region should be used as the default development region?
 * Should the assistant keep conversation history locally, and if so, where?
@@ -968,8 +973,6 @@ These questions should be resolved before or during implementation:
   deployments?
 * Should existing single-user nutrition data be migrated to a chosen initial
   user, or should multi-user setup start with an empty database?
-* Which encryption library should be used for Garmin credential storage?
-* How should Garmin credentials be entered, rotated, and deleted by each user?
 * Should each user have exactly one Garmin account, or should multiple Garmin
   accounts per application user be supported later?
 * Should conversations and token usage be stored per user, or remain browser

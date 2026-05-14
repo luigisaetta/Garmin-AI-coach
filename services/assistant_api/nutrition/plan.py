@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-14
 License: MIT
 """
 
@@ -21,10 +21,11 @@ from pypdf.errors import PdfReadError
 
 
 @dataclass(frozen=True)
-class NutritionPlan:
+class NutritionPlan:  # pylint: disable=too-many-instance-attributes
     """The current stored nutrition plan extracted from an uploaded PDF."""
 
     id: int
+    user_id: int
     original_filename: str
     content_type: str
     file_sha256: str
@@ -51,6 +52,7 @@ class NutritionPlanService:
     def replace_current_plan(
         self,
         *,
+        user_id: int,
         original_filename: str,
         content_type: str,
         pdf_bytes: bytes,
@@ -66,7 +68,7 @@ class NutritionPlanService:
             connection.execute(
                 """
                 INSERT INTO nutrition_plan_current (
-                    id,
+                    user_id,
                     original_filename,
                     content_type,
                     file_sha256,
@@ -75,7 +77,7 @@ class NutritionPlanService:
                     updated_at
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
+                ON CONFLICT(user_id) DO UPDATE SET
                     original_filename = excluded.original_filename,
                     content_type = excluded.content_type,
                     file_sha256 = excluded.file_sha256,
@@ -84,7 +86,7 @@ class NutritionPlanService:
                     updated_at = excluded.updated_at
                 """,
                 (
-                    self.CURRENT_PLAN_ID,
+                    user_id,
                     original_filename,
                     content_type,
                     file_sha256,
@@ -94,18 +96,19 @@ class NutritionPlanService:
                 ),
             )
 
-        plan = self.get_current_plan()
+        plan = self.get_current_plan(user_id=user_id)
         if plan is None:
             raise RuntimeError("nutrition plan was not persisted")
         return plan
 
-    def get_current_plan(self) -> NutritionPlan | None:
+    def get_current_plan(self, *, user_id: int) -> NutritionPlan | None:
         """Return the current nutrition plan, when one has been uploaded."""
         with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT
                     id,
+                    user_id,
                     original_filename,
                     content_type,
                     file_sha256,
@@ -113,9 +116,9 @@ class NutritionPlanService:
                     uploaded_at,
                     updated_at
                 FROM nutrition_plan_current
-                WHERE id = ?
+                WHERE user_id = ?
                 """,
-                (self.CURRENT_PLAN_ID,),
+                (user_id,),
             ).fetchone()
 
         if row is None:
@@ -128,14 +131,20 @@ class NutritionPlanService:
         with self._connect() as connection:
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS nutrition_plan_current (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
                     original_filename TEXT NOT NULL,
                     content_type TEXT NOT NULL,
                     file_sha256 TEXT NOT NULL,
                     extracted_text TEXT NOT NULL,
                     uploaded_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
                 )
+                """)
+            connection.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_plan_current_user
+                ON nutrition_plan_current(user_id)
                 """)
 
     def _connect(self) -> sqlite3.Connection:
@@ -161,6 +170,7 @@ def _plan_from_row(row: sqlite3.Row) -> NutritionPlan:
     """Convert a SQLite row to a typed nutrition plan."""
     return NutritionPlan(
         id=row["id"],
+        user_id=row["user_id"],
         original_filename=row["original_filename"],
         content_type=row["content_type"],
         file_sha256=row["file_sha256"],
