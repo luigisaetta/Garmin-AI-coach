@@ -5,7 +5,7 @@
  * License: MIT
  */
 
-import { buildBackendHeaders } from "../_lib/authHeaders";
+import { buildBackendHeaders } from "../../_lib/authHeaders";
 
 const ASSISTANT_API_URL =
   process.env.ASSISTANT_API_URL ??
