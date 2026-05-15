@@ -224,6 +224,9 @@ Nutrition services are responsible for:
 * Storing food diary entries entered by the authenticated user
 * Storing uploaded nutrition-plan documents and extracted text for the
   authenticated user
+* Optionally rewriting a diary day's free-text meal notes with the configured
+  Responses API model for clarity and structure, without adding foods,
+  quantities, judgments, or recommendations
 * Normalising the current plan into a structured local representation
 * Comparing diary entries against the current plan by week
 * Producing adherence summaries, deviations, uncertainties, and points of attention
@@ -234,6 +237,8 @@ Nutrition services must not:
 * Claim to replace the nutritionist
 * Diagnose medical conditions
 * Prescribe calorie targets, macro targets, supplements, or diet changes unless they are explicitly present in the uploaded plan
+* Use diary text rewriting to change the user's stated food intake or infer
+  missing details
 * Treat model-generated analysis as a clinical decision
 * Log raw diary entries, uploaded documents, or full nutrition prompts by default
 

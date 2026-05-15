@@ -21,6 +21,8 @@ def disable_dotenv_loading(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "services.garmin_api.training_data_provider.load_dotenv", lambda: False
     )
+    monkeypatch.delenv("GARMIN_COMPACT_ACTIVITY_PAYLOAD", raising=False)
+    monkeypatch.delenv("REDACT_PII", raising=False)
 
 
 class FakeGarminClient:

@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-15
 License: MIT
 """
 
@@ -17,6 +17,7 @@ from services.assistant_api.api.main import (
     create_app,
     get_current_user,
     get_garmin_credential_repository,
+    get_nutrition_diary_rewrite_service,
     get_nutrition_diary_service,
     get_nutrition_plan_service,
     get_orchestrator,
@@ -34,6 +35,7 @@ from services.assistant_api.identity.garmin_credentials import (
 from services.assistant_api.identity.users import ApplicationUser, UserRepository
 from services.assistant_api.nutrition.diary import NutritionDiaryService
 from services.assistant_api.nutrition.plan import NutritionPlanService
+from services.assistant_api.nutrition.rewrite import NutritionDiaryRewriteResult
 
 
 class FakeOrchestrator:
@@ -109,6 +111,26 @@ class FakeTrainingProvider:  # pylint: disable=too-few-public-methods
         )
 
 
+class FakeDiaryRewriteService:  # pylint: disable=too-few-public-methods
+    """Fake diary rewrite service used by endpoint tests."""
+
+    calls: list[dict[str, str]] = []
+
+    async def rewrite(self, rewrite_input) -> NutritionDiaryRewriteResult:
+        """Record the rewrite request and return edited text."""
+        FakeDiaryRewriteService.calls.append(
+            {
+                "entry_date": rewrite_input.entry_date,
+                "training_type": rewrite_input.training_type,
+                "meals_text": rewrite_input.meals_text,
+                "notes": rewrite_input.notes,
+            }
+        )
+        return NutritionDiaryRewriteResult(
+            rewritten_meals_text="Colazione: yogurt e miele."
+        )
+
+
 def build_client() -> TestClient:
     """Create a test client with network-dependent orchestration replaced."""
     app = create_app()
@@ -126,6 +148,10 @@ def build_client_with_diary(tmp_path) -> TestClient:
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_nutrition_diary_service] = (
         lambda: NutritionDiaryService(database_path)
+    )
+    FakeDiaryRewriteService.calls.clear()
+    app.dependency_overrides[get_nutrition_diary_rewrite_service] = (
+        FakeDiaryRewriteService
     )
     return TestClient(app)
 
@@ -472,6 +498,34 @@ def test_post_nutrition_diary_entry_accepts_date_in_payload(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["training_type"] == "Cycling"
+
+
+def test_post_nutrition_diary_rewrite_returns_unsaved_text(tmp_path) -> None:
+    """Verify clients can ask the backend to rewrite diary meal text."""
+    client = build_client_with_diary(tmp_path)
+
+    response = client.post(
+        "/nutrition/diary-entries/2026-05-15/rewrite",
+        json={
+            "training_type": "Easy run",
+            "meals_text": "colazione yogurt miele",
+            "notes": "energia buona",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "rewritten_meals_text": "Colazione: yogurt e miele.",
+        "token_usage": None,
+    }
+    assert FakeDiaryRewriteService.calls == [
+        {
+            "entry_date": "2026-05-15",
+            "training_type": "Easy run",
+            "meals_text": "colazione yogurt miele",
+            "notes": "energia buona",
+        }
+    ]
 
 
 def test_get_nutrition_diary_entry_returns_404_for_missing_day(tmp_path) -> None:

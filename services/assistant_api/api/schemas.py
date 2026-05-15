@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-15
 License: MIT
 """
 
@@ -108,6 +108,21 @@ class NutritionDiaryEntryUpdateRequest(BaseModel):
     training_type: str = Field(min_length=1, max_length=80)
     meals_text: str = Field(min_length=1, max_length=12000)
     notes: str = Field(default="", max_length=4000)
+
+
+class NutritionDiaryRewriteRequest(BaseModel):
+    """Request payload for rewriting one diary day's meal text."""
+
+    training_type: str = Field(min_length=1, max_length=80)
+    meals_text: str = Field(min_length=1, max_length=12000)
+    notes: str = Field(default="", max_length=4000)
+
+
+class NutritionDiaryRewriteResponse(BaseModel):
+    """Rewritten meal text returned by the assistant API."""
+
+    rewritten_meals_text: str
+    token_usage: TokenUsage | None = None
 
 
 class NutritionDiaryEntryResponse(BaseModel):

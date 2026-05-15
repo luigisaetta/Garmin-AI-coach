@@ -1,7 +1,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-11
+ * Last modified: 2026-05-15
  * License: MIT
  */
 
@@ -816,6 +816,13 @@ textarea:disabled {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 .primaryAction {
   display: inline-flex;
   align-items: center;
@@ -985,6 +992,12 @@ textarea:disabled {
   }
 
   .primaryAction {
+    width: 100%;
+  }
+
+  .formActions,
+  .formActions .secondaryAction,
+  .formActions .primaryAction {
     width: 100%;
   }
 }

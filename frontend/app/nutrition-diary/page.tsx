@@ -21,6 +21,7 @@ import {
   Soup,
   Sun,
   UploadCloud,
+  WandSparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -47,6 +48,10 @@ type NutritionPlan = {
   extracted_text: string;
   uploaded_at: string;
   updated_at: string;
+};
+
+type NutritionDiaryRewrite = {
+  rewritten_meals_text: string;
 };
 
 const TRAINING_TYPES = [
@@ -90,6 +95,7 @@ export default function NutritionDiaryDemo() {
   const [nutritionPlan, setNutritionPlan] = useState<NutritionPlan | null>(null);
   const [planMessage, setPlanMessage] = useState("Checking nutrition plan");
   const [selectedPlanFile, setSelectedPlanFile] = useState<File | null>(null);
+  const [isRewritingMeals, setIsRewritingMeals] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -237,6 +243,49 @@ export default function NutritionDiaryDemo() {
     } catch {
       setDiaryState("error");
       setStatusMessage("Could not save this diary entry");
+    }
+  }
+
+  async function rewriteMealText() {
+    const trimmedMeals = meals.trim();
+    if (!trimmedMeals) {
+      setDiaryState("error");
+      setStatusMessage("Meal description is required");
+      return;
+    }
+
+    setIsRewritingMeals(true);
+    setStatusMessage("Rewriting diary text");
+
+    try {
+      const response = await fetch(
+        `/api/nutrition/diary-entries/${encodeURIComponent(diaryDate)}/rewrite`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            training_type: trainingType,
+            meals_text: trimmedMeals,
+            notes: notes.trim(),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Diary rewrite API returned HTTP ${response.status}`);
+      }
+
+      const rewrite = (await response.json()) as NutritionDiaryRewrite;
+      setMeals(rewrite.rewritten_meals_text);
+      setDiaryState("editing");
+      setStatusMessage("AI rewrite ready to review");
+    } catch {
+      setDiaryState("error");
+      setStatusMessage("Could not rewrite this diary text");
+    } finally {
+      setIsRewritingMeals(false);
     }
   }
 
@@ -509,17 +558,31 @@ export default function NutritionDiaryDemo() {
                 />
               </label>
 
-              <button
-                className="primaryAction"
-                disabled={diaryState === "loading"}
-                type="button"
-                onClick={() => {
-                  void saveDiaryEntry();
-                }}
-              >
-                <Save size={17} />
-                <span>{savedEntry ? "Update day" : "Save day"}</span>
-              </button>
+              <div className="formActions">
+                <button
+                  className="secondaryAction"
+                  disabled={diaryState === "loading" || isRewritingMeals}
+                  type="button"
+                  onClick={() => {
+                    void rewriteMealText();
+                  }}
+                >
+                  <WandSparkles size={17} />
+                  <span>{isRewritingMeals ? "Rewriting" : "Rewrite with AI"}</span>
+                </button>
+
+                <button
+                  className="primaryAction"
+                  disabled={diaryState === "loading" || isRewritingMeals}
+                  type="button"
+                  onClick={() => {
+                    void saveDiaryEntry();
+                  }}
+                >
+                  <Save size={17} />
+                  <span>{savedEntry ? "Update day" : "Save day"}</span>
+                </button>
+              </div>
             </section>
           </div>
 

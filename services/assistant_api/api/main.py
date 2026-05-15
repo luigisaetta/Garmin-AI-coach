@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-15
 License: MIT
 """
 
@@ -28,6 +28,8 @@ from services.assistant_api.api.schemas import (
     NutritionDiaryEntryRequest,
     NutritionDiaryEntryResponse,
     NutritionDiaryEntryUpdateRequest,
+    NutritionDiaryRewriteRequest,
+    NutritionDiaryRewriteResponse,
     NutritionPlanResponse,
 )
 from services.assistant_api.identity.garmin_credentials import (
@@ -40,6 +42,12 @@ from services.assistant_api.nutrition.diary import (
     NutritionDiaryEntry,
     NutritionDiaryEntryInput,
     NutritionDiaryService,
+)
+from services.assistant_api.nutrition.rewrite import (
+    NutritionDiaryRewriteError,
+    NutritionDiaryRewriteInput,
+    NutritionDiaryRewriteService,
+    NutritionDiaryRewriteSettings,
 )
 from services.assistant_api.nutrition.analysis import (
     NutritionAnalysisSettings,
@@ -128,6 +136,15 @@ def get_nutrition_plan_service() -> NutritionPlanService:
     database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
     LOGGER.info("nutrition plan service init database_path=%s", database_path)
     return NutritionPlanService(database_path)
+
+
+def get_nutrition_diary_rewrite_service() -> NutritionDiaryRewriteService:
+    """Create the nutrition diary rewrite service."""
+    settings = load_settings()
+    return NutritionDiaryRewriteService(
+        inference_client=get_inference_client(),
+        settings=NutritionDiaryRewriteSettings(model_id=settings.model_id),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -388,6 +405,38 @@ def create_app() -> FastAPI:
             ),
         )
         return _diary_entry_response(entry)
+
+    @api.post(
+        "/nutrition/diary-entries/{entry_date}/rewrite",
+        response_model=NutritionDiaryRewriteResponse,
+    )
+    async def rewrite_nutrition_diary_entry(
+        entry_date: date,
+        request: NutritionDiaryRewriteRequest,
+        current_user: ApplicationUser = Depends(get_current_user),
+        rewrite_service: NutritionDiaryRewriteService = Depends(
+            get_nutrition_diary_rewrite_service
+        ),
+    ) -> NutritionDiaryRewriteResponse:
+        """Rewrite one diary day's meal text without saving it."""
+        _ = current_user
+        LOGGER.info("nutrition diary rewrite request entry_date=%s", entry_date)
+        try:
+            result = await rewrite_service.rewrite(
+                NutritionDiaryRewriteInput(
+                    entry_date=entry_date.isoformat(),
+                    training_type=request.training_type,
+                    meals_text=request.meals_text,
+                    notes=request.notes,
+                )
+            )
+        except NutritionDiaryRewriteError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return NutritionDiaryRewriteResponse(
+            rewritten_meals_text=result.rewritten_meals_text,
+            token_usage=result.token_usage,
+        )
 
     @api.post(
         "/nutrition/plan",

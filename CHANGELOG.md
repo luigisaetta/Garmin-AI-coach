@@ -5,6 +5,7 @@
 ### Added
 
 - Added optional Garmin activity payload compaction through `GARMIN_COMPACT_ACTIVITY_PAYLOAD` to reduce assistant tool token usage while preserving coaching-relevant fields.
+- Added a server-side Responses API nutrition diary rewrite workflow and frontend "Rewrite with AI" action for unsaved meal-text cleanup.
 
 ### Changed
 
