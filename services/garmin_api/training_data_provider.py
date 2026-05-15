@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-15
 License: MIT
 """
 
@@ -46,6 +46,65 @@ PII_KEY_FRAGMENTS = (
 BOOLEAN_TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 BOOLEAN_FALSE_VALUES = frozenset({"0", "false", "no", "n", "off"})
 MAX_FLOAT_DECIMAL_PLACES = 4
+ACTIVITY_COMPACT_KEYS = frozenset(
+    {
+        "activityId",
+        "activityName",
+        "activityTrainingLoad",
+        "activityType",
+        "aerobicTrainingEffect",
+        "anaerobicTrainingEffect",
+        "averageHR",
+        "averageRunningCadenceInStepsPerMinute",
+        "averageSpeed",
+        "avgGradeAdjustedSpeed",
+        "avgGroundContactTime",
+        "avgPower",
+        "avgStrideLength",
+        "avgVerticalOscillation",
+        "avgVerticalRatio",
+        "calories",
+        "distance",
+        "duration",
+        "elapsedDuration",
+        "elevationGain",
+        "elevationLoss",
+        "lapCount",
+        "maxHR",
+        "maxPower",
+        "maxRunningCadenceInStepsPerMinute",
+        "maxSpeed",
+        "moderateIntensityMinutes",
+        "movingDuration",
+        "normPower",
+        "sportTypeId",
+        "startTimeGMT",
+        "startTimeLocal",
+        "steps",
+        "trainingEffectLabel",
+        "vO2MaxValue",
+        "vigorousIntensityMinutes",
+    }
+)
+ACTIVITY_COMPACT_PREFIXES = (
+    "fastestSplit_",
+    "hrTimeInZone_",
+    "powerTimeInZone_",
+)
+SPLIT_SUMMARY_COMPACT_KEYS = frozenset(
+    {
+        "averageSpeed",
+        "distance",
+        "duration",
+        "elevationLoss",
+        "maxDistance",
+        "maxElevationGain",
+        "maxSpeed",
+        "noOfSplits",
+        "splitType",
+        "totalAscent",
+    }
+)
 
 
 class GarminConnectClient(Protocol):
@@ -82,6 +141,7 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         password: str | None = None,
         session_storage_path: str | None = None,
         redact_pii: bool | None = None,
+        compact_activity_payload: bool | None = None,
         client: GarminConnectClient | None = None,
     ) -> None:
         """Create a training data provider.
@@ -99,6 +159,10 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             redact_pii: Whether potential PII fields should be masked before
                 payloads leave the provider. When omitted, `REDACT_PII` is read
                 from the environment and defaults to enabled.
+            compact_activity_payload: Whether activity payloads should be reduced
+                to coaching-relevant summary fields before leaving the provider.
+                When omitted, `GARMIN_COMPACT_ACTIVITY_PAYLOAD` is read from the
+                environment and defaults to disabled.
             client: Optional Garmin-compatible client, primarily intended for
                 tests and local fakes. The object must expose `login` and
                 `get_activities_by_date`.
@@ -110,6 +174,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
                 real client must be created.
         """
         self._redact_pii = self._resolve_redact_pii(redact_pii)
+        self._compact_activity_payload = self._resolve_compact_activity_payload(
+            compact_activity_payload
+        )
 
         if client is not None:
             self._client = client
@@ -164,7 +231,7 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             enddate=end.isoformat(),
             activitytype=garmin_activity_type,
         )
-        return [self._sanitize_activity(activity) for activity in activities]
+        return [self._prepare_activity(activity) for activity in activities]
 
     def get_heart_rates(
         self,
@@ -315,6 +382,41 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
 
         return value
 
+    def _prepare_activity(self, activity: dict[str, Any]) -> dict[str, Any]:
+        """Sanitize and optionally compact one Garmin activity payload."""
+        sanitized_activity = self._sanitize_activity(activity)
+        if not self._compact_activity_payload:
+            return sanitized_activity
+        return self._compact_activity(sanitized_activity)
+
+    @staticmethod
+    def _compact_activity(activity: dict[str, Any]) -> dict[str, Any]:
+        """Keep only coaching-relevant fields from a Garmin activity payload."""
+        compacted = {
+            key: value
+            for key, value in activity.items()
+            if key in ACTIVITY_COMPACT_KEYS
+            or any(key.startswith(prefix) for prefix in ACTIVITY_COMPACT_PREFIXES)
+        }
+
+        activity_type = activity.get("activityType")
+        if isinstance(activity_type, dict):
+            compacted["activityType"] = _compact_type_payload(activity_type)
+
+        split_summaries = activity.get("splitSummaries")
+        if isinstance(split_summaries, list):
+            compacted["splitSummaries"] = [
+                {
+                    key: value
+                    for key, value in split_summary.items()
+                    if key in SPLIT_SUMMARY_COMPACT_KEYS
+                }
+                for split_summary in split_summaries
+                if isinstance(split_summary, dict)
+            ]
+
+        return {key: value for key, value in compacted.items() if value is not None}
+
     @staticmethod
     def _resolve_redact_pii(redact_pii: bool | None) -> bool:
         """Resolve the PII redaction flag from an explicit value or environment.
@@ -328,18 +430,21 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         Raises:
             ValueError: If `REDACT_PII` is set to an unsupported boolean value.
         """
-        if redact_pii is not None:
-            return redact_pii
+        return _resolve_boolean_env(
+            explicit_value=redact_pii,
+            environment_name="REDACT_PII",
+            default=True,
+        )
 
-        load_dotenv()
-        raw_value = os.getenv("REDACT_PII", "true").strip().lower()
-        if raw_value in BOOLEAN_TRUE_VALUES:
-            return True
-        if raw_value in BOOLEAN_FALSE_VALUES:
-            return False
-
-        raise ValueError(
-            "REDACT_PII must be one of: true, false, yes, no, 1, 0, on, off."
+    @staticmethod
+    def _resolve_compact_activity_payload(
+        compact_activity_payload: bool | None,
+    ) -> bool:
+        """Resolve whether activity payloads should be compacted."""
+        return _resolve_boolean_env(
+            explicit_value=compact_activity_payload,
+            environment_name="GARMIN_COMPACT_ACTIVITY_PAYLOAD",
+            default=False,
         )
 
     @staticmethod
@@ -356,3 +461,35 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         return key in PII_EXACT_KEYS or any(
             fragment in normalized_key for fragment in PII_KEY_FRAGMENTS
         )
+
+
+def _compact_type_payload(type_payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep the stable type fields from a Garmin type object."""
+    compacted = {
+        key: type_payload[key]
+        for key in ("typeKey", "typeId", "parentTypeId")
+        if key in type_payload
+    }
+    return compacted
+
+
+def _resolve_boolean_env(
+    *,
+    explicit_value: bool | None,
+    environment_name: str,
+    default: bool,
+) -> bool:
+    """Resolve a boolean setting from an explicit value or environment."""
+    if explicit_value is not None:
+        return explicit_value
+
+    load_dotenv()
+    raw_value = os.getenv(environment_name, str(default)).strip().lower()
+    if raw_value in BOOLEAN_TRUE_VALUES:
+        return True
+    if raw_value in BOOLEAN_FALSE_VALUES:
+        return False
+
+    raise ValueError(
+        f"{environment_name} must be one of: true, false, yes, no, 1, 0, on, off."
+    )

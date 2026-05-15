@@ -284,6 +284,110 @@ def test_list_activities_rounds_float_values_without_mutating_source() -> None:
     assert raw_activity["laps"][0]["beginLatitude"] == 45.123456789
 
 
+def test_list_activities_can_compact_activity_payloads() -> None:
+    """Verify that optional compaction removes non-coaching Garmin fields."""
+    raw_activity = {
+        "activityId": 123,
+        "activityName": "Tempo Run",
+        "activityTrainingLoad": 382.6075,
+        "activityType": {
+            "isHidden": False,
+            "parentTypeId": 17,
+            "restricted": False,
+            "typeId": 1,
+            "typeKey": "running",
+        },
+        "activityUUID": "not-needed-by-coaching",
+        "aerobicTrainingEffect": 5.0,
+        "averageHR": 161.0,
+        "averageSpeed": 3.511,
+        "avgPower": 116.0,
+        "calories": 829.0,
+        "distance": 13834.6504,
+        "duration": 3939.946,
+        "fastestSplit_1000": 262.976,
+        "hasImages": False,
+        "hrTimeInZone_5": 2744.046,
+        "ownerDisplayName": "luigisaetta",
+        "powerTimeInZone_5": 132.873,
+        "privacy": {"typeKey": "subscribers"},
+        "splitSummaries": [
+            {
+                "averageSpeed": 3.512,
+                "distance": 13826.0996,
+                "duration": 3936.5381,
+                "maxDistance": 12962,
+                "numFalls": 0,
+                "splitType": "RWD_RUN",
+            }
+        ],
+        "startTimeLocal": "2026-05-13 18:25:04",
+        "trainingEffectLabel": "VO2MAX",
+    }
+    provider = TrainingDataProvider(
+        client=FakeGarminClient([raw_activity]),
+        compact_activity_payload=True,
+    )
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [
+        {
+            "activityId": 123,
+            "activityName": "Tempo Run",
+            "activityTrainingLoad": 382.6075,
+            "activityType": {
+                "parentTypeId": 17,
+                "typeId": 1,
+                "typeKey": "running",
+            },
+            "aerobicTrainingEffect": 5.0,
+            "averageHR": 161.0,
+            "averageSpeed": 3.511,
+            "avgPower": 116.0,
+            "calories": 829.0,
+            "distance": 13834.6504,
+            "duration": 3939.946,
+            "fastestSplit_1000": 262.976,
+            "hrTimeInZone_5": 2744.046,
+            "powerTimeInZone_5": 132.873,
+            "splitSummaries": [
+                {
+                    "averageSpeed": 3.512,
+                    "distance": 13826.0996,
+                    "duration": 3936.5381,
+                    "maxDistance": 12962,
+                    "splitType": "RWD_RUN",
+                }
+            ],
+            "startTimeLocal": "2026-05-13 18:25:04",
+            "trainingEffectLabel": "VO2MAX",
+        }
+    ]
+
+
+def test_list_activities_can_enable_compaction_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify that the compact activity payload flag can be read from `.env`."""
+    monkeypatch.setenv("GARMIN_COMPACT_ACTIVITY_PAYLOAD", "true")
+    provider = TrainingDataProvider(
+        client=FakeGarminClient(
+            [
+                {
+                    "activityId": 123,
+                    "activityUUID": "dropped",
+                    "distance": 1000.0,
+                }
+            ]
+        )
+    )
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [{"activityId": 123, "distance": 1000.0}]
+
+
 def test_list_activities_can_return_unredacted_payloads_when_disabled() -> None:
     """Verify that PII redaction can be disabled for local debugging."""
     raw_activity = {
@@ -299,6 +403,16 @@ def test_list_activities_can_return_unredacted_payloads_when_disabled() -> None:
     activities = provider.list_activities("2026-05-01", "2026-05-10")
 
     assert activities == [raw_activity]
+
+
+def test_provider_rejects_invalid_compact_activity_payload_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify that compact payload configuration fails fast when invalid."""
+    monkeypatch.setenv("GARMIN_COMPACT_ACTIVITY_PAYLOAD", "sometimes")
+
+    with pytest.raises(ValueError, match="GARMIN_COMPACT_ACTIVITY_PAYLOAD"):
+        TrainingDataProvider(client=FakeGarminClient())
 
 
 def test_provider_passes_session_storage_path_to_client_login(

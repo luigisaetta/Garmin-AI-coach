@@ -67,6 +67,7 @@ GARMIN_SESSION_STORAGE_PATH=.garmin/tokens
 GARMIN_CREDENTIAL_ENCRYPTION_KEY=
 GARMIN_SESSION_STORAGE_ROOT=/data/garmin-sessions
 REDACT_PII=true
+GARMIN_COMPACT_ACTIVITY_PAYLOAD=false
 GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4
@@ -90,6 +91,7 @@ Configuration reference:
 | `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | Fernet key used by the assistant backend to encrypt per-user Garmin credentials in SQLite. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `GARMIN_SESSION_STORAGE_ROOT` | Recommended | Root directory for user-scoped Garmin session tokens. Docker Compose defaults this to `/data/garmin-sessions`. |
 | `REDACT_PII` | No | Redacts account, owner, profile, location, and coordinate-like fields before data can move toward assistant context. Keep this set to `true` unless explicitly debugging sanitized provider behaviour. |
+| `GARMIN_COMPACT_ACTIVITY_PAYLOAD` | No | Reduces Garmin activity payloads to coaching-relevant summary, zone, split, and training-effect fields before they are sent to assistant tooling. Defaults to `false` for backward-compatible local debugging. |
 | `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |

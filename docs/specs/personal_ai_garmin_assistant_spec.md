@@ -199,6 +199,9 @@ The Garmin data access layer is responsible for:
   current authenticated application user
 * Encapsulating Garmin Connect access in Python through `TrainingDataProvider`
 * Normalising Garmin data into stable internal response schemas
+* Optionally compacting Garmin activity payloads to coaching-relevant fields
+  when `GARMIN_COMPACT_ACTIVITY_PAYLOAD` is enabled, reducing model context
+  usage without changing the assistant tool boundary
 * Handling Garmin specific errors, rate limits, and retries
 * Optionally caching Garmin responses in a future iteration
 
@@ -390,6 +393,11 @@ Provider responsibilities:
   configured, and save refreshed tokens there after credential login
 * Convert Garmin Connect responses into stable internal models before they are returned to assistant tools
 * Mask noisy or personal account and location fields that are not useful for coaching analysis, such as `userRoles`, owner metadata, profile image URLs, coordinates, and location names, before data can be passed toward the assistant or LLM context when `REDACT_PII` is enabled
+* Remove non-coaching Garmin metadata such as UUIDs, media flags, privacy
+  objects, owner metadata, and vendor-only booleans when
+  `GARMIN_COMPACT_ACTIVITY_PAYLOAD` is enabled, while preserving activity
+  identity, type, timing, distance, load, heart-rate, pace, power, cadence,
+  zone, split, and training-effect fields needed for coaching analysis
 * Hide Garmin-specific response shapes, exceptions, retries, rate limits, and session handling from the rest of the application
 * Provide a mockable boundary for unit tests
 
@@ -744,6 +752,8 @@ Likely configuration values:
 * Garmin credential encryption key or mounted secret reference
 * Garmin session storage root path, if used
 * PII redaction flag, `REDACT_PII`, default enabled
+* Optional activity payload compaction flag,
+  `GARMIN_COMPACT_ACTIVITY_PAYLOAD`, default disabled
 * OCI region, `REGION`
 * Generative AI API key, `GENAI_API_KEY`
 * OpenAI-compatible generative AI base URL derived from `REGION` as `https://inference.generativeai.{REGION}.oci.oraclecloud.com/openai/v1`

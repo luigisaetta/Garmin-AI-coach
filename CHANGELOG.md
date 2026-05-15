@@ -2,6 +2,10 @@
 
 ## 2026-05-15
 
+### Added
+
+- Added optional Garmin activity payload compaction through `GARMIN_COMPACT_ACTIVITY_PAYLOAD` to reduce assistant tool token usage while preserving coaching-relevant fields.
+
 ### Changed
 
 - Updated README, Quickstart, specification milestones, and multi-user migration notes to reflect the current local multi-user implementation.
