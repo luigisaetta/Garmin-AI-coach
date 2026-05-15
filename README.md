@@ -238,3 +238,10 @@ Before changing application code, read:
 AGENTS.md
 docs/specs/personal_ai_garmin_assistant_spec.md
 ```
+
+## Garmin Disclaimer
+
+Garmin is a registered trademark of Garmin Ltd. or its subsidiaries. This
+project is an independent, open-source tool and is not affiliated with, endorsed
+by, sponsored by, or approved by Garmin Ltd. All data is sourced from the user's
+own Garmin Connect account.
