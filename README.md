@@ -39,8 +39,8 @@ This repository follows a spec-driven development approach. The reference specif
 docs/specs/personal_ai_garmin_assistant_spec.md
 ```
 
-The initial architecture is composed of two runnable services and a local
-Python Garmin data access layer:
+The current local architecture is composed of a browser-facing NGINX reverse
+proxy, two application services, and a local Python Garmin data access layer:
 
 ![Garmin AI Coach architecture](images/architecture.png)
 
@@ -58,12 +58,12 @@ The Garmin data access layer is the only code path that knows Garmin Connect imp
 
 The project does not currently expose a separate Garmin HTTP API container. That remains a future architectural option if the specification is updated first.
 
-### Nutrition persistence
+### Nutrition and adherence analysis
 
-The frontend also includes an early nutrition diary page for the planned
-nutrition adherence extension. The page lets the user select a diary date,
-choose the training context for the day, describe meals and notes in free text,
-and save or update the selected day.
+The frontend includes an early nutrition diary page for the nutrition adherence
+extension. The page lets the authenticated user select a diary date, choose the
+training context for the day, describe meals and notes in free text, and save or
+update the selected day.
 
 The same page includes a nutrition-plan upload widget. The user can upload one
 PDF nutrition plan; uploading a new PDF replaces the previous current plan. The
@@ -72,50 +72,73 @@ metadata, in the local SQLite database. The original PDF is not retained by the
 current MVP.
 
 The assistant backend persists diary entries and the current nutrition plan
-through dedicated nutrition services. Docker Compose mounts the database
-directory on the `assistant-data` volume so entries and the current plan survive
-container stop and restart. The current MVP does not perform adherence analysis
-yet.
+through dedicated nutrition services. It also exposes an on-demand nutrition
+adherence analysis tool that compares the authenticated user's diary entries,
+current plan, and Garmin training context for the requested period. Docker
+Compose mounts the database directory on the `assistant-data` volume so entries,
+plans, application users, and Garmin credential metadata survive container stop
+and restart.
+
+### Local multi-user model
+
+The current local deployment is multi-user through an NGINX Basic Auth reverse
+proxy. NGINX forwards the authenticated username to the frontend and backend
+using `X-Authenticated-User`; the backend resolves that username to a stable
+local `user_id` before reading or writing user-owned data.
+
+Garmin credentials are configured per authenticated application user from the
+`/account` page and are stored encrypted in local SQLite. Garmin session tokens
+are stored under a user-specific directory below
+`GARMIN_SESSION_STORAGE_ROOT`. Nutrition diary entries and the current nutrition
+plan are also scoped by `user_id`.
 
 ## Guiding Principles
 
 - Training data is sensitive: no credentials in the repository, no raw Garmin payloads in logs, and no full prompts containing private training details by default.
-- The assistant backend never accesses Garmin Connect directly: it always goes through the dedicated local API.
+- Assistant orchestration never accesses Garmin Connect directly: it always goes through the dedicated local provider boundary.
 - The first version does not introduce an MCP server.
 - The deployment target is Docker Compose on Ubuntu Linux, intended to run locally on an Intel NUC.
 - Python code must use Python 3.11 or newer, clear typing, small modules, and tests with `pytest`.
 - Changes must stay small, verifiable, and consistent with the specification.
 
-## Initial Milestones
+## Milestones
 
-1. Repository skeleton with Docker Compose, empty services, health endpoints, and a basic frontend page.
-2. Garmin data provider foundation with a client wrapper, provider methods, and normalized schemas.
-3. Assistant backend foundation with a chat endpoint, local training provider tools, simple date range inference, and OCI Enterprise AI integration.
-4. Frontend chat flow with input, responses, loading states, and error states.
-5. Local deployment hardening with environment variables, health checks, and operating documentation.
-6. Nutrition MVP with navigation from the chat page, date selection, training context selection, free-text meal notes, local draft preview, SQLite-backed diary persistence for one day at a time, and single-current-plan PDF upload with extracted text storage.
+1. Done: Repository skeleton with Docker Compose, health endpoints, and a basic frontend page.
+2. Done: Garmin data provider foundation with provider methods, PII redaction, session reuse, and mocked tests.
+3. Done: Assistant backend foundation with chat endpoints, local training provider tools, date range inference, and OCI Enterprise AI Responses API integration.
+4. Done: Frontend chat flow with streaming responses, loading states, error states, Markdown rendering, and token usage display.
+5. Done: Local deployment hardening with Docker Compose, NGINX reverse proxy, environment variables, health checks, and operating documentation.
+6. Implemented MVP: Nutrition diary, PDF plan upload, SQLite-backed per-user persistence, and on-demand adherence analysis through assistant tooling.
+7. Implemented foundation: Local multi-user support with Basic Auth, application users, backend current-user resolution, user-scoped Garmin credentials, user-scoped Garmin session storage, and user-scoped nutrition data.
+
+Remaining polish is tracked in the specification and migration notes: clearer
+frontend handling of 401/403 responses, current-user display/logout guidance for
+Basic Auth, broader HTTP-level cross-user tests, and eventual retirement of the
+legacy single-user Garmin environment fallback from the default runtime path.
 
 ## Project Status
 
 The project now has a first working vertical slice:
 
 - A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
-- A frontend navigation menu linking the coaching chat and the food diary page.
+- A frontend navigation menu linking the coaching chat, food diary page, and account settings page.
 - A nutrition diary UI with date selection, training type selection, meal descriptions, notes, local draft preview, save/update flows, and a PDF nutrition-plan upload widget.
 - A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, nutrition diary endpoints, and nutrition-plan upload/read endpoints.
-- SQLite-backed nutrition diary and nutrition-plan persistence through dedicated backend services.
+- SQLite-backed, user-scoped nutrition diary and nutrition-plan persistence through dedicated backend services.
+- On-demand nutrition adherence analysis that uses the current user's nutrition plan, diary entries, and Garmin training context.
 - Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
-- Initial model tool calling with `list_activities` and `get_heart_rates`, backed by the local Python `TrainingDataProvider`.
+- Model tool calling with `list_activities`, `get_heart_rates`, and `analyze_nutrition_adherence_period`, backed by local Python service boundaries.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
+- Local multi-user support with NGINX Basic Auth, a backend `users` table, per-user encrypted Garmin credentials, and per-user Garmin session storage.
 - Backend logging for request flow, model calls, tool execution, and stream completion.
-- Docker Compose and Dockerfiles for the current two-service runtime: `frontend` and `assistant_api`.
+- Docker Compose and Dockerfiles for the current browser-facing `nginx` service plus internal `frontend` and `assistant_api` services.
 
 The current implementation is still an early local development version. It
 requires local environment configuration for OCI inference and a
 `GARMIN_CREDENTIAL_ENCRYPTION_KEY` before live end-to-end coaching questions can
 use real Garmin data. Garmin credentials are configured per authenticated user
 from the account page and are stored encrypted in local SQLite. The nutrition
-MVP stores daily entries and one current extracted nutrition plan locally.
+MVP stores daily entries and one current extracted nutrition plan per user.
 
 ## Local Docker Runtime
 
@@ -135,7 +158,8 @@ docker compose build assistant_api
 
 The script creates or updates one entry in `deployment/nginx/auth/.htpasswd`
 and one matching row in the SQLite `users` table. The username maps to a stable
-internal `user_id` that later multi-user steps use as the ownership key.
+internal `user_id` used as the ownership key for Garmin credentials, Garmin
+session storage, nutrition diary entries, and nutrition plans.
 
 After login, open `/account` to save, test, replace, or delete the current
 user's Garmin credentials. Garmin session tokens are stored in a user-specific
@@ -173,7 +197,7 @@ files.
 | `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
 | `NUTRITION_DB_PATH` | No | `assistant_api` | SQLite database path for nutrition diary persistence. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
-| `APP_DB_PATH` | No | provisioning script, future identity resolver | SQLite database path for local application users. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
+| `APP_DB_PATH` | No | provisioning script, identity and Garmin credential repositories | SQLite database path for local application users and encrypted Garmin credential metadata. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
 | `ASSISTANT_API_URL` | Yes for local frontend development | frontend route handlers | Backend URL used by the Next.js server when running outside Docker, usually `http://localhost:8000`. Docker Compose sets this internally to `http://assistant_api:8000`. |
 | `NEXT_PUBLIC_ASSISTANT_API_URL` | No | frontend route handlers | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets this internally to `http://assistant_api:8000`. |
 | `FRONTEND_PORT` | No | Docker Compose | Host port mapped to nginx, which protects and proxies the frontend. Defaults to `3000`. |

@@ -2,7 +2,11 @@
 
 This guide prepares a local runtime and development environment for Garmin AI Coach.
 
-The project currently has a first working vertical slice: a Next.js frontend, a FastAPI assistant backend, Responses API integration, and a local Python Garmin data provider boundary. The commands below prepare the local development and Docker runtime.
+The project currently has a local multi-user vertical slice: an NGINX Basic
+Auth reverse proxy, a Next.js frontend, a FastAPI assistant backend, Responses
+API integration, a local Python Garmin data provider boundary, user-scoped
+Garmin credentials, and user-scoped nutrition persistence. The commands below
+prepare the local development and Docker runtime.
 
 ## Prerequisites
 
@@ -66,9 +70,10 @@ REDACT_PII=true
 GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4
+NUTRITION_DB_PATH=/data/garmin_ai_coach.db
+APP_DB_PATH=/data/garmin_ai_coach.db
 ASSISTANT_API_URL=http://localhost:8000
 NEXT_PUBLIC_ASSISTANT_API_URL=http://localhost:8000
-ASSISTANT_API_PORT=8000
 FRONTEND_PORT=3000
 LOG_LEVEL=INFO
 ```
@@ -88,9 +93,10 @@ Configuration reference:
 | `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `NUTRITION_DB_PATH` | No | SQLite database path for user-scoped nutrition diary and plan persistence. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
+| `APP_DB_PATH` | No | SQLite database path for local application users and encrypted Garmin credential metadata. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
 | `ASSISTANT_API_URL` | Yes for local frontend development | URL the Next.js server uses to call the assistant backend when running outside Docker, usually `http://localhost:8000`. Docker Compose overrides it internally to `http://assistant_api:8000`. |
 | `NEXT_PUBLIC_ASSISTANT_API_URL` | No | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets it internally to `http://assistant_api:8000`. |
-| `ASSISTANT_API_PORT` | No | Host port for the assistant backend container. Defaults to `8000`. |
 | `FRONTEND_PORT` | No | Host port for the frontend container. Defaults to `3000`. |
 | `LOG_LEVEL` | No | Assistant backend logging level. Defaults to `INFO`. |
 
@@ -121,7 +127,8 @@ Create a local `.env` file first:
 cp .env.example .env
 ```
 
-Fill in private Garmin and OCI values, then create the first local user:
+Fill in private OCI values and set `GARMIN_CREDENTIAL_ENCRYPTION_KEY`, then
+create the first local user:
 
 ```bash
 docker compose build assistant_api
@@ -131,10 +138,9 @@ docker compose build assistant_api
 The script updates `deployment/nginx/auth/.htpasswd` and ensures a matching
 row exists in the SQLite `users` table. It creates one user per run.
 
-Set `GARMIN_CREDENTIAL_ENCRYPTION_KEY` before saving Garmin credentials in the
-web app. After login, open `/account` to save, test, replace, or delete the
-Garmin credentials for the authenticated application user. The backend stores
-the Garmin password encrypted and keeps Garmin session tokens under
+After login, open `/account` to save, test, replace, or delete the Garmin
+credentials for the authenticated application user. The backend stores the
+Garmin password encrypted and keeps Garmin session tokens under
 `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
 
 Then start the stack:
@@ -159,6 +165,10 @@ http://assistant_api:8000
 ```
 
 The frontend should communicate only with the assistant backend. Assistant tools call the local Python Garmin training data provider inside backend code. A standalone Garmin data API container is not part of the current implementation.
+
+Basic Auth credentials are cached by browsers, so logout is limited in the
+current local deployment. To switch users reliably during testing, use a fresh
+private browser session or clear the browser's saved Basic Auth credentials.
 
 ## Specification First
 

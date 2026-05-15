@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-15
+
+### Changed
+
+- Updated README, Quickstart, specification milestones, and multi-user migration notes to reflect the current local multi-user implementation.
+- Clarified that nutrition adherence analysis is now available on demand through assistant tooling.
+- Reclassified Milestone 6 and Milestone 7 items into implemented capabilities and remaining follow-up work.
+- Documented Basic Auth logout limitations and current residual multi-user polish items.
+
+### Verified
+
+- Documentation-only update; no application code changed.
+
 ## 2026-05-13
 
 ### Added

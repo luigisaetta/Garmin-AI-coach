@@ -1,10 +1,11 @@
-# Migration Multi User
+# Multi-User Foundation
 
-This document expands Milestone 7, "multi-user foundation", from
+This document records the implemented local multi-user foundation for Milestone
+7 and the remaining follow-up work. It expands
 `docs/specs/personal_ai_garmin_assistant_spec.md`.
 
-The goal is to evolve the current single-user local deployment into a
-multi-user solution while preserving the current architecture:
+The project has evolved from the original single-user local deployment into a
+small multi-user solution while preserving the current architecture:
 
 * Next.js frontend
 * Python assistant backend
@@ -13,17 +14,19 @@ multi-user solution while preserving the current architecture:
 * Docker Compose deployment on the local Intel NUC target
 * no MCP server
 
-The migration must keep user data isolated by default. Garmin credentials,
+The multi-user foundation must keep user data isolated by default. Garmin credentials,
 Garmin session material, training-derived context, nutrition diary entries,
 nutrition plans, generated reports, and any future cache or conversation
 storage must be scoped to the authenticated application user.
 
-## Milestone 7 Scope
+## Current Status
 
-Milestone 7 should deliver:
+Implemented:
 
 * Local application user model with stable `user_id` and unique `username`
-* Authentication flow for login, logout, and current-user resolution
+* NGINX Basic Auth in front of the browser-facing application
+* Authenticated username forwarding through `X-Authenticated-User`
+* Backend current-user resolution for protected routes
 * Backend enforcement of authenticated user identity on chat and nutrition
   endpoints
 * User-scoped nutrition diary and nutrition-plan persistence
@@ -31,25 +34,39 @@ Milestone 7 should deliver:
 * User-scoped Garmin session storage
 * Migration path from the current single-user nutrition storage to per-user
   records, if existing data must be preserved
-* Tests for authentication, authorization, and cross-user isolation
+* Tests for current-user rejection, repository isolation, credential secrecy,
+  and user-scoped Garmin provider construction
 
-## Proposed First Authentication Step
+Remaining:
 
-The first implementation can use Basic Authentication at the NGINX layer.
-NGINX should sit in front of the frontend and assistant backend in Docker
-Compose and should authenticate users before protected requests reach backend
-services.
+* Frontend should preserve and display `401 Unauthorized` and `403 Forbidden`
+  responses consistently across proxy routes.
+* The UI should show the current authenticated application username, or expose a
+  safe current-user endpoint that the frontend can call.
+* Basic Auth logout limitations should be documented for operators and users.
+* HTTP-level cross-user isolation tests should be expanded across protected
+  endpoints, complementing the current repository and service tests.
+* Legacy single-user Garmin environment variables should remain only as a
+  documented compatibility path until they can be removed or isolated from the
+  default multi-user runtime.
 
-After authentication, NGINX should pass the authenticated username to the
-backend through an internal header, for example:
+## Authentication
+
+The current implementation uses Basic Authentication at the NGINX layer. NGINX
+sits in front of the frontend and assistant backend in Docker Compose and
+authenticates users before protected requests reach backend services.
+
+After authentication, NGINX passes the authenticated username through an
+internal header:
 
 ```text
 X-Authenticated-User: <username>
 ```
 
-The backend should trust this header only when it is received through the
+The backend trusts this header only when it is received through the
 internal Docker network path controlled by NGINX. Direct public access to the
-assistant backend must not be allowed to bypass NGINX authentication.
+assistant backend is not exposed in the default multi-user Docker Compose
+runtime.
 
 Basic Auth is acceptable as a local first step, but it has limitations:
 
@@ -61,10 +78,10 @@ Basic Auth is acceptable as a local first step, but it has limitations:
 
 ## Backend User Resolution
 
-The backend needs a single current-user resolver used by protected routes and
+The backend has a single current-user resolver used by protected routes and
 assistant orchestration entry points.
 
-Recommended behavior:
+Current behavior:
 
 1. Read the authenticated username from the trusted NGINX header.
 2. Look up the corresponding local application user.
@@ -76,47 +93,39 @@ authoritative `username` or `user_id` for ownership decisions.
 
 ## Local Users Table
 
-Even when Basic Auth is handled by NGINX, the application should keep a local
+Even though Basic Auth is handled by NGINX, the application keeps a local
 `users` table so persisted data can reference a stable owner.
 
-Suggested fields:
+Current fields:
 
 ```text
 id
 username
 display_name
+is_active
 created_at
 updated_at
 ```
 
-`username` should be unique and should map to the Basic Auth username. The
-database primary key should be used as `user_id` in user-owned tables.
+`username` is unique and maps to the Basic Auth username. The database primary
+key is used as `user_id` in user-owned tables.
 
 ## User Provisioning
 
-The first implementation needs a small provisioning workflow so NGINX users and
-application users do not diverge.
+The implemented provisioning workflow is
+`scripts/create_basic_auth_user.sh USERNAME [DISPLAY_NAME]`. The script creates
+or updates the `.htpasswd` entry and ensures a matching row exists in the
+SQLite `users` table. It can be run through Docker Compose for the default
+container database path or locally with `USE_COMPOSE=0`.
 
-Options:
-
-* Add a local admin script that creates or updates the `.htpasswd` entry and
-  ensures a matching row exists in the `users` table.
-* Start with a manually managed `.htpasswd` file and a documented command to
-  create the matching application user.
-* Add a later admin-only UI only after the basic model is stable.
-
-The first Docker Compose setup should document how the initial user is created.
+A later admin-only UI can be added after the local model is stable.
 
 ## Existing Data Migration
 
-The current nutrition storage is single-user. Before enabling multi-user
-behavior, choose one of these paths:
+Existing single-user nutrition storage can be migrated before enabling
+multi-user behavior, or a deployment can start with an empty database.
 
-* Migrate existing nutrition diary entries and current nutrition plan to a
-  configured initial user.
-* Start multi-user deployments with an empty database.
-
-Preserving existing data requires a deterministic migration:
+Preserving existing data uses this deterministic migration:
 
 1. Create or select the initial application user.
 2. Add `user_id` columns to user-owned tables.
@@ -135,23 +144,21 @@ python -m services.assistant_api.identity.migrate_user_ids \
   --display-name "Alice Runner"
 ```
 
-The script ensures the local application user exists, rebuilds the current
+The script ensures the local application user exists, rebuilds legacy
 single-user nutrition tables with `user_id NOT NULL`, backfills existing diary
 and current-plan rows to the initial user, and creates user-scoped indexes.
-Run it after provisioning the initial Basic Auth user and before updating the
-backend repositories to require `user_id`.
 
 ## Nutrition Schema Changes
 
-Nutrition persistence must become user-scoped.
+Nutrition persistence is user-scoped.
 
-Expected changes:
+Implemented schema behavior:
 
-* Add `user_id` to nutrition diary entries.
-* Add `user_id` to nutrition plan records.
-* Make diary uniqueness user-scoped, for example `(user_id, entry_date)`.
-* Make the current nutrition plan user-scoped.
-* Update repository methods so every read, write, update, and delete requires
+* `user_id` is present on nutrition diary entries.
+* `user_id` is present on nutrition plan records.
+* Diary uniqueness is scoped by `(user_id, entry_date)`.
+* The current nutrition plan is scoped by `user_id`.
+* Repository methods require
   `user_id`.
 
 The "current nutrition plan" must mean "current plan for this authenticated
@@ -161,7 +168,7 @@ user", not a global singleton.
 
 Each application user needs separate Garmin credentials.
 
-The backend should introduce a Garmin credential repository with these
+The backend includes a Garmin credential repository with these
 responsibilities:
 
 * Store one Garmin credential record per application user.
@@ -171,28 +178,26 @@ responsibilities:
 * Allow a user to replace or delete their Garmin credentials without affecting
   other users.
 
-For a local MVP, SQLite plus encrypted values is acceptable. A future deployment
-may replace this repository with a secret manager without changing assistant
-tool contracts.
-
 The implemented local MVP stores one Garmin credential row per `user_id` in
 SQLite. The Garmin password is encrypted with Fernet using
 `GARMIN_CREDENTIAL_ENCRYPTION_KEY` or `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`.
 Only safe status metadata is returned to frontend clients.
+
+A future deployment may replace this repository with a secret manager without
+changing assistant tool contracts.
 
 ## Credential Encryption
 
 Garmin passwords and sensitive session material must not be stored in
 plaintext.
 
-Recommended first step:
+Implemented first step:
 
 * Use a server-side encryption key supplied through an environment variable or
   mounted secret file.
 * Do not store the encryption key in SQLite.
 * Do not commit the encryption key.
-* Consider `cryptography.Fernet` for the first local implementation because it
-  is simple and well understood for symmetric encryption.
+* Use `cryptography.Fernet` for symmetric encryption.
 
 Example configuration name:
 
@@ -214,8 +219,8 @@ Example layout:
 /data/garmin-sessions/{user_id}/
 ```
 
-The provider construction path should resolve the current authenticated user,
-load that user's Garmin credential record, and pass a user-specific session
+The provider construction path resolves the current authenticated user, loads
+that user's Garmin credential record, and passes a user-specific session
 storage path into `TrainingDataProvider`.
 
 The implemented default root is `GARMIN_SESSION_STORAGE_ROOT`, which Docker
@@ -226,9 +231,9 @@ or session paths through model tool arguments.
 
 ## Garmin Credential UI and API
 
-The frontend will need a minimal account area for Garmin credential management.
+The frontend includes a minimal account area for Garmin credential management.
 
-Initial capabilities:
+Implemented capabilities:
 
 * Show whether Garmin credentials are configured for the current user.
 * Save or replace Garmin credentials.
@@ -246,25 +251,29 @@ values.
 If NGINX handles Basic Auth, direct access to `assistant_api` must not bypass
 authentication.
 
-Preferred options:
+Current default:
 
 * Do not expose `assistant_api` directly on the host in Docker Compose.
 * Route frontend proxy calls and browser-facing backend calls through NGINX.
-* Optionally require an internal shared header from NGINX to the backend.
 
 If direct backend exposure is needed for local debugging, it should be
 explicitly documented and disabled by default in multi-user mode.
 
 ## Frontend Changes
 
-The frontend should stay thin.
+The frontend stays thin: it forwards authenticated requests to backend services
+and does not make Garmin Connect or model calls directly.
 
-Minimum changes:
+Implemented:
+
+* Add a Garmin credentials settings flow.
+* Forward `X-Authenticated-User` from NGINX to backend proxy calls.
+
+Remaining:
 
 * Show the authenticated username returned by the backend or forwarded through
   a safe current-user endpoint.
 * Handle `401 Unauthorized` and `403 Forbidden` responses clearly.
-* Add a Garmin credentials settings flow.
 
 With Basic Auth, logout may need documentation rather than a polished UI
 because browser credential caching makes clean logout unreliable.
@@ -297,35 +306,40 @@ Do not include:
 The assistant tools should continue to operate on user-scoped backend calls.
 The LLM should never select or pass user identity as a tool argument.
 
-## Test Plan
+## Test Coverage
 
-Milestone 7 requires tests before implementation is considered complete.
+Current tests cover the most important storage and backend ownership contracts.
 
-Recommended tests:
+Implemented:
 
 * Unauthenticated protected requests are rejected.
 * Unknown Basic Auth username is rejected by the backend resolver.
-* User A cannot read User B's nutrition plan.
-* User A cannot overwrite User B's nutrition diary entry.
+* User-scoped nutrition diary persistence is isolated by `user_id`.
+* User-scoped current nutrition plans are isolated by `user_id`.
 * Diary uniqueness is scoped by `(user_id, entry_date)`.
 * Current nutrition plan is scoped by `user_id`.
 * Garmin credential lookup returns only the current user's credential record.
 * Garmin session storage path differs for User A and User B.
 * Garmin credentials are not returned by API responses.
-* Logs and model tool outputs do not include Garmin secrets.
 
-## Suggested Implementation Order
+Remaining useful tests:
 
-1. Add NGINX Basic Auth and authenticated username forwarding.
-2. Add the local `users` table and provisioning script.
-3. Add the backend current-user resolver.
-4. Protect chat and nutrition endpoints with current-user resolution.
-5. Add `user_id` to nutrition schema and migrate existing data.
-6. Update nutrition repositories and services to require `user_id`.
-7. Add encrypted Garmin credential storage per `user_id`.
-8. Add user-scoped Garmin session storage and provider construction.
-9. Add minimal frontend account/Garmin credential settings.
-10. Add cross-user isolation tests and update documentation.
+* HTTP-level User A/User B isolation tests for nutrition plan and diary routes.
+* HTTP-level 401/403 propagation tests for Next.js proxy routes.
+* Log and model tool output assertions that Garmin secrets are not emitted.
 
-This order keeps the migration incremental while reducing the risk of
-cross-user data leakage.
+## Implementation Order
+
+Completed order:
+
+1. Added NGINX Basic Auth and authenticated username forwarding.
+2. Added the local `users` table and provisioning script.
+3. Added the backend current-user resolver.
+4. Protected chat and nutrition endpoints with current-user resolution.
+5. Added `user_id` to nutrition schema and migration support for existing data.
+6. Updated nutrition repositories and services to require `user_id`.
+7. Added encrypted Garmin credential storage per `user_id`.
+8. Added user-scoped Garmin session storage and provider construction.
+9. Added minimal frontend account/Garmin credential settings.
+10. Added repository, service, and backend tests for the implemented ownership
+    boundaries.

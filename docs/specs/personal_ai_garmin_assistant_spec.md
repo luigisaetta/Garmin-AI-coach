@@ -134,11 +134,11 @@ The nutrition extension must not introduce an MCP server. The first persistence
 implementation uses SQLite inside the assistant backend service, with the
 database path configured by `NUTRITION_DB_PATH`.
 
-The next architectural evolution is multi-user operation. Authenticated
-requests must carry a backend-validated user identity. Backend services must use
-that identity to scope Garmin credential lookup, Garmin session storage,
-nutrition diary entries, nutrition plans, generated reports, and any future
-conversation or cache records.
+The current local architecture includes a multi-user foundation. Authenticated
+requests carry a backend-validated user identity. Backend services use that
+identity to scope Garmin credential lookup, Garmin session storage, nutrition
+diary entries, nutrition plans, generated reports, and any future conversation
+or cache records.
 
 ## 6. Service responsibilities
 
@@ -146,8 +146,8 @@ conversation or cache records.
 
 The frontend is responsible for:
 
-* Rendering login, logout, and authenticated session state when multi-user
-  support is enabled
+* Rendering login, logout, and authenticated session state when the selected
+  authentication mechanism supports it
 * Rendering the assistant chat interface
 * Rendering a nutrition section when the nutrition extension is implemented
 * Sending user messages to the assistant backend
@@ -261,8 +261,8 @@ inside the assistant backend:
 * A stable internal `user_id` is the ownership key for persisted data.
 * A unique `username` identifies the local application account and may be used
   for login and display.
-* Authentication state is established by the backend and carried by secure
-  HTTP-only browser cookies or an equivalent backend-validated bearer token.
+* Authentication state is established by the backend or a trusted local reverse
+  proxy and carried to the backend through a backend-validated mechanism.
 * Passwords, if local password authentication is used, must be stored only as
   modern salted password hashes.
 * All protected backend endpoints must resolve the current user before reading
@@ -868,11 +868,11 @@ For each implementation task:
 6. Update this specification only when behaviour, architecture, or contracts change.
 7. Avoid unrelated refactoring.
 
-## 21. Initial milestones
+## 21. Milestone status
 
 ### Milestone 1, repository skeleton
 
-Deliver:
+Status: implemented.
 
 * `AGENTS.md`
 * This specification
@@ -883,7 +883,7 @@ Deliver:
 
 ### Milestone 2, Garmin data provider foundation
 
-Deliver:
+Status: implemented.
 
 * `TrainingDataProvider` backed by the Python `garminconnect` library
 * Authentication configuration
@@ -897,7 +897,7 @@ Deliver:
 
 ### Milestone 3, assistant backend foundation
 
-Deliver:
+Status: implemented.
 
 * Chat endpoint
 * Local training provider adapter for assistant tools
@@ -907,43 +907,61 @@ Deliver:
 
 ### Milestone 4, frontend chat flow
 
-Deliver:
+Status: implemented.
 
 * Chat input
-* Response display
+* Markdown response display
 * Loading and error states
-* Connection to assistant backend
+* Streaming connection to assistant backend
+* Token usage display when returned by the backend
 
 ### Milestone 5, local deployment hardening
 
-Deliver:
+Status: implemented.
 
 * Docker Compose working on Ubuntu Linux
+* NGINX browser-facing reverse proxy for the local multi-user deployment
 * Environment variable documentation
 * Health checks
 * Basic README instructions
 
 ### Milestone 6, nutrition adherence extension
 
-Deliver:
+Status: partially implemented. The current MVP includes diary persistence, PDF
+plan upload, extracted-text storage, and on-demand adherence analysis through
+assistant tooling. Remaining work is mostly product depth and API polish.
 
-* Specification update for final nutrition storage and retention decisions
+Implemented:
+
 * Nutrition section in the Next.js frontend
-* Food diary entry creation and listing
-* Markdown nutrition-plan upload
-* PDF nutrition-plan upload when extraction requirements are confirmed
-* Local nutrition persistence
-* Weekly adherence report
-* Safe model prompts that include only required nutrition context
+* Food diary entry creation and single-day retrieval
+* PDF nutrition-plan upload with extracted text storage
+* User-scoped local SQLite nutrition persistence
+* On-demand adherence report via `analyze_nutrition_adherence_period`
+* Safe nutrition analysis prompt limits
 * Tests with local fixtures and mocked model calls
+
+Not yet implemented:
+
+* Date-range diary listing endpoint for frontend browsing
+* Dedicated weekly report endpoint outside chat/tool orchestration
+* Markdown nutrition-plan upload
+* Explicit nutrition upload size limit
+* Original uploaded document retention, because the MVP intentionally stores
+  only extracted text and metadata
 
 ### Milestone 7, multi-user foundation
 
-Deliver:
+Status: implemented foundation. The current deployment uses NGINX Basic Auth as
+the browser-facing authentication layer and backend `user_id` ownership for
+protected data. Some frontend experience and test coverage polish remains.
+
+Implemented:
 
 * Detailed migration plan in `docs/migration_multi_user/README.md`
 * Local application user model with stable `user_id` and unique `username`
-* Authentication flow for login, logout, and current-user resolution
+* NGINX Basic Auth and authenticated username forwarding
+* Backend current-user resolution from `X-Authenticated-User`
 * Backend enforcement of authenticated user identity on chat and nutrition
   endpoints
 * User-scoped nutrition diary and nutrition-plan persistence
@@ -951,30 +969,56 @@ Deliver:
 * User-scoped Garmin session storage
 * Migration path from the current single-user nutrition storage to per-user
   records, if existing data must be preserved
-* Tests for authentication, authorization, and cross-user isolation
+* Tests for current-user resolution, repository isolation, credential secrecy,
+  and user-scoped Garmin session path selection
+
+Remaining:
+
+* Clearer frontend propagation and display of `401 Unauthorized` and
+  `403 Forbidden` responses from all proxy routes
+* Current-user display or a safe current-user endpoint
+* Documentation of Basic Auth logout limitations
+* Broader HTTP-level cross-user isolation tests across protected endpoints
+* Eventual removal or stricter isolation of the legacy single-user Garmin
+  environment fallback from the default multi-user runtime
 
 ## 22. Open questions
 
-These questions should be resolved before or during implementation:
+Resolved implementation choices:
 
 * Which Python web framework is selected for each backend service?
+  FastAPI is used for the assistant backend.
+* Should uploaded nutrition-plan originals be retained, or should only extracted text and structured summaries be stored?
+  The MVP stores only extracted text and metadata; original PDFs are not
+  retained.
+* Which PDF extraction library should be used?
+  `pypdf` is used for the current PDF text extraction implementation.
+* Should the first multi-user authentication mechanism be local
+  username/password, reverse-proxy authentication, or an external OIDC provider?
+  The current local implementation uses NGINX Basic Auth with backend
+  current-user resolution.
+* How should the first admin or initial user be created in local Docker Compose
+  deployments?
+  `scripts/create_basic_auth_user.sh` creates or updates the Basic Auth entry
+  and matching local application user.
+* Should existing single-user nutrition data be migrated to a chosen initial
+  user, or should multi-user setup start with an empty database?
+  Both paths are supported: new deployments can start empty, and
+  `services.assistant_api.identity.migrate_user_ids` can backfill existing
+  nutrition rows to an initial user.
+* Should each user have exactly one Garmin account, or should multiple Garmin
+  accounts per application user be supported later?
+  The current model supports one Garmin credential record per application user.
+
+Still open:
+
 * Which OCI region should be used as the default development region?
 * Should the assistant keep conversation history locally, and if so, where?
 * Which activity types should be prioritised first, running, cycling, swimming, strength, or all available activities?
-* Should uploaded nutrition-plan originals be retained, or should only extracted text and structured summaries be stored?
 * What maximum upload size should be allowed for nutrition documents?
-* Which PDF extraction library should be used?
 * Should food diary entries support photos in a later iteration?
 * Should nutrition reports be generated only on demand, or cached locally?
-* Should the first multi-user authentication mechanism be local
-  username/password, reverse-proxy authentication, or an external OIDC provider?
 * What password policy and session lifetime should be used for local accounts?
-* How should the first admin or initial user be created in local Docker Compose
-  deployments?
-* Should existing single-user nutrition data be migrated to a chosen initial
-  user, or should multi-user setup start with an empty database?
-* Should each user have exactly one Garmin account, or should multiple Garmin
-  accounts per application user be supported later?
 * Should conversations and token usage be stored per user, or remain browser
   session state only?
 
