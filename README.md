@@ -7,7 +7,7 @@
 
 ![Personal Training AI Coach](images/garmin-ai-coach2.png)
 
-A personal assistant for turning Garmin Connect training data, nutrition diary
+A personal assistant for turning training data, nutrition diary
 notes, and nutrition-plan context into useful conversations, clear
 explanations, and coaching-style insights.
 
@@ -23,8 +23,8 @@ training history and receive contextual answers. For example:
 - Did my food diary match the nutrition plan during this training week?
 - Were there recurring nutrition gaps around harder workout days?
 
-The project is designed to be local, controllable, and privacy-first. Garmin
-training data and nutrition notes are personal data, so the architecture avoids
+The project is designed to be local, controllable, and privacy-first. 
+Training data and nutrition notes are personal data, so the architecture avoids
 risky shortcuts and keeps data access, AI reasoning, and the web interface
 clearly separated.
 
@@ -65,7 +65,7 @@ docs/specs/personal_ai_garmin_assistant_spec.md
 ```
 
 The current local architecture is composed of a browser-facing NGINX reverse
-proxy, two application services, and a local Python Garmin data access layer:
+proxy, two application services, and a local Python data access layer:
 
 ![Garmin AI Coach architecture](images/architecture.png)
 
@@ -77,11 +77,10 @@ The frontend provides the web experience: chat, loading states, errors, and resp
 
 The assistant backend receives user questions, decides which Garmin data is needed through model tool calling, calls the local Python training data provider, and builds requests to OCI Enterprise AI using the Responses API.
 
-### Garmin data access layer
+### Data access layer
 
-The Garmin data access layer is the only code path that knows Garmin Connect implementation details. In the current implementation it runs inside the assistant backend process behind `TrainingDataProvider`. It handles authentication, data retrieval, PII redaction, Garmin-specific errors, rate limits, and future caching.
+The data access layer is the only code path that knows Garmin Connect implementation details. In the current implementation it runs inside the assistant backend process behind `TrainingDataProvider`. It handles authentication, data retrieval, PII redaction, Garmin-specific errors, rate limits, and future caching.
 
-The project does not currently expose a separate Garmin HTTP API container. That remains a future architectural option if the specification is updated first.
 
 ### Nutrition and adherence analysis
 
@@ -119,7 +118,7 @@ plan are also scoped by `user_id`.
 
 ## Guiding Principles
 
-- Training data is sensitive: no credentials in the repository, no raw Garmin payloads in logs, and no full prompts containing private training details by default.
+- Training data is sensitive: no credentials in the repository, no raw data payloads in logs, and no full prompts containing private training details by default.
 - Assistant orchestration never accesses Garmin Connect directly: it always goes through the dedicated local provider boundary.
 - The first version does not introduce an MCP server.
 - The deployment target is Docker Compose on Ubuntu Linux, intended to run locally on an Intel NUC.
