@@ -30,7 +30,7 @@ clearly separated.
 
 ## Vision
 
-Personal Training AI Coach aims to become a web assistant that can read Garmin Connect data
+Personal Training AI Coach aims to become a web assistant that can read training data
 on demand, reason about training context, and return coaching-style answers: not
 just metrics, but practical interpretation.
 
@@ -67,7 +67,7 @@ docs/specs/personal_ai_garmin_assistant_spec.md
 The current local architecture is composed of a browser-facing NGINX reverse
 proxy, two application services, and a local Python data access layer:
 
-![Garmin AI Coach architecture](images/architecture.png)
+![AI Coach architecture](images/architecture.png)
 
 ### Frontend Next.js
 
