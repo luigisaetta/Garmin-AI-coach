@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-12
+ * Last modified: 2026-05-15
  * License: MIT
  */
 
@@ -60,6 +60,18 @@ const TRAINING_TYPES = [
   "Race",
   "Other",
 ];
+
+const EMPTY_DAY_MEAL_TEMPLATE = [
+  "Breakfast:",
+  "",
+  "Morning snack:",
+  "",
+  "Lunch:",
+  "",
+  "Afternoon snack:",
+  "",
+  "Dinner:",
+].join("\n");
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -143,7 +155,7 @@ export default function NutritionDiaryDemo() {
 
         if (response.status === 404) {
           setTrainingType(TRAINING_TYPES[0]);
-          setMeals("");
+          setMeals(EMPTY_DAY_MEAL_TEMPLATE);
           setNotes("");
           setDiaryState("missing");
           setStatusMessage("No entry for this date");
