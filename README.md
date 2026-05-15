@@ -5,7 +5,7 @@
 [![Lint: pylint](https://img.shields.io/badge/lint-pylint-yellow.svg)](https://pylint.pycqa.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-![Personal Training AI Coach](images/personal-ai-coach2.png)
+![Personal Training AI Coach](images/personal-ai-coach.png)
 
 A personal assistant for turning training data, nutrition diary
 notes, and nutrition-plan context into useful conversations, clear
