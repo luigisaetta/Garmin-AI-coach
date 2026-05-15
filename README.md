@@ -1,11 +1,11 @@
-# Garmin AI Coach
+# Personal Training AI Coach
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Lint: pylint](https://img.shields.io/badge/lint-pylint-yellow.svg)](https://pylint.pycqa.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-![Garmin AI Coach](images/garmin-ai-coach2.png)
+![Personal Training AI Coach](images/garmin-ai-coach2.png)
 
 A personal assistant for turning Garmin Connect training data, nutrition diary
 notes, and nutrition-plan context into useful conversations, clear
@@ -30,7 +30,7 @@ clearly separated.
 
 ## Vision
 
-Garmin AI Coach aims to become a web assistant that can read Garmin Connect data
+Personal Training AI Coach aims to become a web assistant that can read Garmin Connect data
 on demand, reason about training context, and return coaching-style answers: not
 just metrics, but practical interpretation.
 
