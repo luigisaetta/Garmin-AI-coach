@@ -7,28 +7,53 @@
 
 ![Garmin AI Coach](images/garmin-ai-coach2.png)
 
-A personal assistant for turning Garmin Connect training data into useful conversations, clear explanations, and coaching-style insights.
+A personal assistant for turning Garmin Connect training data, nutrition diary
+notes, and nutrition-plan context into useful conversations, clear
+explanations, and coaching-style insights.
 
-The idea is simple: instead of looking at charts, numbers, and isolated activities, you can ask natural-language questions about your training history and receive contextual answers. For example:
+The idea is simple: instead of looking at charts, numbers, isolated activities,
+and scattered food notes, you can ask natural-language questions about your
+training history and receive contextual answers. For example:
 
 - How has my training load changed over the last four weeks?
 - Which runs had an unusually high heart rate for the pace?
 - Summarize my latest cycling workout.
 - Did I increase volume too quickly this week?
 - What should I pay attention to before my next long run?
+- Did my food diary match the nutrition plan during this training week?
+- Were there recurring nutrition gaps around harder workout days?
 
-The project is designed to be local, controllable, and privacy-first. Garmin training data is personal data, so the initial architecture avoids risky shortcuts and keeps data access, AI reasoning, and the web interface clearly separated.
+The project is designed to be local, controllable, and privacy-first. Garmin
+training data and nutrition notes are personal data, so the architecture avoids
+risky shortcuts and keeps data access, AI reasoning, and the web interface
+clearly separated.
 
 ## Vision
 
-Garmin AI Coach aims to become a web assistant that can read Garmin Connect data on demand, reason about training context, and return coaching-style answers: not just metrics, but practical interpretation.
+Garmin AI Coach aims to become a web assistant that can read Garmin Connect data
+on demand, reason about training context, and return coaching-style answers: not
+just metrics, but practical interpretation.
 
-The goal is not to replace a coach or generate complex training plans in the first version. The initial goal is to build a solid foundation for querying personal sports data naturally:
+Sports preparation is not only about workouts. Nutrition, recovery, and daily
+habits shape how training is absorbed. For this reason, the assistant also
+includes an early nutrition diary workflow: the user can record daily meals,
+upload a nutrition plan, and ask for adherence-oriented reflections that connect
+food notes with the current plan and the observed training load.
+
+The goal is not to replace a coach, a nutritionist, or qualified professional
+advice. The nutrition features are intended as a reflection and preparation
+support: they can help surface patterns, missing diary details, recurring gaps,
+and useful questions to discuss with a nutrition professional.
+
+The initial goal is to build a solid foundation for querying personal sports
+and nutrition-support data naturally:
 
 - understand trends in volume, intensity, and recovery
 - compare weeks, activities, and training periods
 - identify anomalies in workouts
 - get quick summaries of recent sessions
+- review food diary notes against the current nutrition plan
+- connect nutrition adherence with training-day demands
 - receive cautious, grounded guidance on signals worth monitoring
 
 ## Intended Architecture
