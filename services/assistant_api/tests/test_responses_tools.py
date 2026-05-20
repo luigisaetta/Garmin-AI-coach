@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -29,6 +29,7 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
         """Initialize captured calls."""
         self.calls: list[dict[str, str | None]] = []
         self.heart_rate_calls: list[dict[str, str]] = []
+        self.hrv_calls: list[dict[str, str]] = []
 
     async def list_activities(
         self,
@@ -71,6 +72,29 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
             }
         }
 
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Capture the HRV request and return one daily payload."""
+        self.hrv_calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "user_id": str(user_id),
+            }
+        )
+        return {
+            begin_date: {
+                "calendarDate": begin_date,
+                "lastNightAvg": 49,
+                "status": "BALANCED",
+            }
+        }
+
 
 class FailingTrainingClient:  # pylint: disable=too-few-public-methods
     """Fake local training client that simulates provider failure."""
@@ -94,6 +118,17 @@ class FailingTrainingClient:  # pylint: disable=too-few-public-methods
         begin_date: str,
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
+        """Raise a provider error."""
+        _ = (user_id, begin_date, end_date)
+        raise ValueError("Training data provider failed.")
+
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
         """Raise a provider error."""
         _ = (user_id, begin_date, end_date)
         raise ValueError("Training data provider failed.")
@@ -140,8 +175,9 @@ def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
 
     tool_names = {tool["name"] for tool in runner.tool_definitions()}
 
-    assert tool_names == {"list_activities", "get_heart_rates"}
+    assert tool_names == {"list_activities", "get_heart_rates", "get_hrv_data"}
     assert "get_heart_rates" in SYSTEM_PROMPT
+    assert "get_hrv_data" in SYSTEM_PROMPT
     assert "analyze_nutrition_adherence_period" in SYSTEM_PROMPT
 
 
@@ -255,6 +291,35 @@ async def test_build_tool_outputs_uses_model_extracted_heart_rate_range() -> Non
 
 
 @pytest.mark.anyio
+async def test_build_tool_outputs_uses_model_extracted_hrv_range() -> None:
+    """Verify that HRV tool calls use model-extracted date arguments."""
+    training_client = FakeTrainingClient()
+    function_call = SimpleNamespace(
+        type="function_call",
+        name="get_hrv_data",
+        call_id="call_hrv",
+        arguments='{"begin_date": "2026-05-04", "end_date": "2026-05-05"}',
+    )
+
+    outputs = await responses_tools.build_tool_outputs(
+        function_calls=[function_call],
+        tool_runner=AssistantToolRunner(training_client),
+        user_id=1,
+    )
+
+    assert training_client.hrv_calls == [
+        {
+            "begin_date": "2026-05-04",
+            "end_date": "2026-05-05",
+            "user_id": "1",
+        }
+    ]
+    assert outputs[0]["type"] == "function_call_output"
+    assert outputs[0]["call_id"] == "call_hrv"
+    assert "lastNightAvg" in outputs[0]["output"]
+
+
+@pytest.mark.anyio
 async def test_build_tool_outputs_runs_nutrition_analysis_subagent() -> None:
     """Verify the assistant can execute the nutrition analysis tool."""
     nutrition_agent = FakeNutritionAnalysisAgent()
@@ -338,6 +403,7 @@ def test_tool_data_sources_describe_unique_requested_tools() -> None:
     function_calls = [
         SimpleNamespace(type="function_call", name="list_activities"),
         SimpleNamespace(type="function_call", name="get_heart_rates"),
+        SimpleNamespace(type="function_call", name="get_hrv_data"),
         SimpleNamespace(
             type="function_call", name="analyze_nutrition_adherence_period"
         ),
@@ -349,6 +415,7 @@ def test_tool_data_sources_describe_unique_requested_tools() -> None:
     assert [source.type for source in data_sources] == [
         "garmin_activity_range",
         "garmin_heart_rate_range",
+        "garmin_hrv_range",
         "nutrition_adherence_analysis",
     ]
 

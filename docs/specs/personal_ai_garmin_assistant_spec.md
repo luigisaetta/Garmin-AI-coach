@@ -385,6 +385,9 @@ class TrainingDataProvider:
     def get_heart_rates(...):
         ...
 
+    def get_hrv_data(...):
+        ...
+
     def get_daily_metrics(...):
         ...
 ```
@@ -569,7 +572,24 @@ that are not tied to one specific workout. When a question needs both workout
 context and daily heart-rate context, the assistant may call both
 `list_activities` and `get_heart_rates`.
 
-### 10.3 Nutrition analysis tools
+### 10.3 `get_hrv_data` tool
+
+Tool arguments:
+
+```json
+{
+  "begin_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD"
+}
+```
+
+The tool returns Garmin daily heart-rate variability payloads keyed by ISO date
+for the inclusive date range. The assistant should use this tool for HRV,
+recovery status, overnight recovery, autonomic stress, and readiness trend
+questions. When a question needs both workout context and recovery context, the
+assistant may call both `list_activities` and `get_hrv_data`.
+
+### 10.4 Nutrition analysis tools
 
 When the nutrition extension is implemented, nutrition analysis should be
 available through explicit backend services and, where useful, Responses API

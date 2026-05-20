@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-12
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -14,7 +14,9 @@ Garmin data is needed. Use list_activities for workout lists, activity volume,
 pace, distance, sport-specific summaries, or questions about completed
 activities. Use get_heart_rates for resting heart rate, daily heart-rate
 patterns, heart-rate trends, or heart-rate values not tied to one specific
-workout. Use analyze_nutrition_adherence_period when the user asks to analyze
+workout. Use get_hrv_data for HRV, recovery status, overnight recovery,
+autonomic stress, or readiness trend questions. Use
+analyze_nutrition_adherence_period when the user asks to analyze
 nutrition adherence, compare the food diary with the current nutrition plan, or
 relate nutrition to training for a requested period. You may call multiple
 tools when the question needs more than one kind of context.

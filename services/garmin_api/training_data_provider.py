@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-15
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -120,6 +120,9 @@ class GarminConnectClient(Protocol):
 
     def get_heart_rates(self, cdate: str) -> dict[str, Any]:
         """Return Garmin Connect heart-rate data for one date."""
+
+    def get_hrv_data(self, cdate: str) -> dict[str, Any] | None:
+        """Return Garmin Connect HRV data for one date."""
 
 
 class TrainingDataProvider:  # pylint: disable=too-few-public-methods
@@ -276,6 +279,50 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             current += timedelta(days=1)
 
         return heart_rates
+
+    def get_hrv_data(
+        self,
+        begin_date: date | str,
+        end_date: date | str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Return Garmin HRV payloads for each day in a date range.
+
+        Garmin Connect exposes HRV data as a per-day endpoint. This provider
+        method preserves that raw Garmin payload shape and keys responses by
+        ISO date so assistant tools can reason over recovery trends across an
+        inclusive period.
+
+        Args:
+            begin_date: Inclusive start date for the query. Accepts either a
+                `datetime.date` instance or an ISO `YYYY-MM-DD` string.
+            end_date: Inclusive end date for the query. Accepts either a
+                `datetime.date` instance or an ISO `YYYY-MM-DD` string.
+
+        Returns:
+            A dictionary keyed by ISO date. Each value is the corresponding
+            Garmin Connect HRV dictionary for that day, or `None` when Garmin
+            has no HRV data for that date.
+
+        Raises:
+            ValueError: If either date cannot be parsed as an ISO date or if
+                `begin_date` is after `end_date`.
+        """
+        start = self._coerce_date(begin_date, field_name="begin_date")
+        end = self._coerce_date(end_date, field_name="end_date")
+
+        if start > end:
+            raise ValueError("begin_date must be earlier than or equal to end_date.")
+
+        hrv_data: dict[str, dict[str, Any] | None] = {}
+        current = start
+        while current <= end:
+            current_date = current.isoformat()
+            hrv_data[current_date] = self._sanitize_activity(
+                self._client.get_hrv_data(current_date)
+            )
+            current += timedelta(days=1)
+
+        return hrv_data
 
     @staticmethod
     def _build_client(

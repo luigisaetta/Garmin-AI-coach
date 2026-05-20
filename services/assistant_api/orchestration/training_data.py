@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -35,6 +35,15 @@ class TrainingActivitiesClient(Protocol):  # pylint: disable=too-few-public-meth
         end_date: str,
     ) -> dict[str, dict[str, Any]]:
         """Return daily heart-rate payloads from the local provider."""
+
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Return daily HRV payloads from the local provider."""
 
 
 class LocalTrainingDataClient:  # pylint: disable=too-few-public-methods
@@ -79,6 +88,20 @@ class LocalTrainingDataClient:  # pylint: disable=too-few-public-methods
             end_date=end_date,
         )
 
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Return daily HRV payloads using local Python calls."""
+        _ = user_id
+        return self._provider.get_hrv_data(
+            begin_date=begin_date,
+            end_date=end_date,
+        )
+
 
 class UserScopedTrainingDataClient:  # pylint: disable=too-few-public-methods
     """Create Garmin providers from credentials owned by the current user."""
@@ -119,6 +142,19 @@ class UserScopedTrainingDataClient:  # pylint: disable=too-few-public-methods
     ) -> dict[str, dict[str, Any]]:
         """Return heart-rate payloads for the authenticated user's account."""
         return self._provider_for_user(user_id).get_heart_rates(
+            begin_date=begin_date,
+            end_date=end_date,
+        )
+
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Return HRV payloads for the authenticated user's account."""
+        return self._provider_for_user(user_id).get_hrv_data(
             begin_date=begin_date,
             end_date=end_date,
         )

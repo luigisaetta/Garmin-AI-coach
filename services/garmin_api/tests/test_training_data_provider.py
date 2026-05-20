@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-13
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -32,15 +32,18 @@ class FakeGarminClient:
         self,
         activities: list[dict[str, Any]] | None = None,
         heart_rates_by_date: dict[str, dict[str, Any]] | None = None,
+        hrv_by_date: dict[str, dict[str, Any] | None] | None = None,
     ) -> None:
         """Initialize the fake client with optional activity payloads."""
         self.calls: list[dict[str, str]] = []
         self.heart_rate_calls: list[str] = []
+        self.hrv_calls: list[str] = []
         self.login_tokenstores: list[str | None] = []
         self.activities = activities or [
             {"activityId": 123, "activityName": "Morning Run"}
         ]
         self.heart_rates_by_date = heart_rates_by_date or {}
+        self.hrv_by_date = hrv_by_date or {}
 
     def login(self, tokenstore: str | None = None) -> tuple[str | None, str | None]:
         """Simulate Garmin Connect login without doing network I/O."""
@@ -69,6 +72,19 @@ class FakeGarminClient:
                 "calendarDate": cdate,
                 "restingHeartRate": 48,
                 "heartRateValues": [[0, 52], [60, 58]],
+            },
+        )
+
+    def get_hrv_data(self, cdate: str) -> dict[str, Any] | None:
+        """Record the daily HRV request and return a payload."""
+        self.hrv_calls.append(cdate)
+        return self.hrv_by_date.get(
+            cdate,
+            {
+                "calendarDate": cdate,
+                "weeklyAvg": 52,
+                "lastNightAvg": 49,
+                "status": "BALANCED",
             },
         )
 
@@ -172,6 +188,57 @@ def test_get_heart_rates_masks_pii_fields_from_daily_payloads() -> None:
         "2026-05-01": {
             "calendarDate": "2026-05-01",
             "restingHeartRate": 48,
+            "ownerDisplayName": "*****",
+        }
+    }
+
+
+def test_get_hrv_data_returns_daily_payloads_for_inclusive_range() -> None:
+    """Verify that HRV range queries call Garmin once per day."""
+    client = FakeGarminClient(
+        hrv_by_date={
+            "2026-05-01": {"calendarDate": "2026-05-01", "lastNightAvg": 49},
+            "2026-05-02": None,
+        }
+    )
+    provider = TrainingDataProvider(client=client)
+
+    hrv_data = provider.get_hrv_data("2026-05-01", "2026-05-02")
+
+    assert client.hrv_calls == ["2026-05-01", "2026-05-02"]
+    assert hrv_data == {
+        "2026-05-01": {"calendarDate": "2026-05-01", "lastNightAvg": 49},
+        "2026-05-02": None,
+    }
+
+
+def test_get_hrv_data_rejects_invalid_date_range() -> None:
+    """Verify that HRV queries reject ranges with a start after the end."""
+    provider = TrainingDataProvider(client=FakeGarminClient())
+
+    with pytest.raises(ValueError, match="begin_date"):
+        provider.get_hrv_data("2026-05-10", "2026-05-01")
+
+
+def test_get_hrv_data_masks_pii_fields_from_daily_payloads() -> None:
+    """Verify that raw HRV payload shape still receives PII masking."""
+    client = FakeGarminClient(
+        hrv_by_date={
+            "2026-05-01": {
+                "calendarDate": "2026-05-01",
+                "lastNightAvg": 49,
+                "ownerDisplayName": "luigisaetta",
+            }
+        }
+    )
+    provider = TrainingDataProvider(client=client)
+
+    hrv_data = provider.get_hrv_data("2026-05-01", "2026-05-01")
+
+    assert hrv_data == {
+        "2026-05-01": {
+            "calendarDate": "2026-05-01",
+            "lastNightAvg": 49,
             "ownerDisplayName": "*****",
         }
     }

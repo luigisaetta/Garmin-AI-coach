@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -194,6 +194,24 @@ class FakeTrainingClient:  # pylint: disable=too-few-public-methods
         )
         return {begin_date: {"calendarDate": begin_date, "restingHeartRate": 48}}
 
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Capture model-extracted HRV range arguments."""
+        self.calls.append(
+            {
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "activity_type": "hrv",
+                "user_id": str(user_id),
+            }
+        )
+        return {begin_date: {"calendarDate": begin_date, "lastNightAvg": 49}}
+
 
 class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
     """Fake nutrition analysis subagent."""
@@ -303,6 +321,33 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
             "begin_date": "2026-05-04",
             "end_date": "2026-05-10",
             "activity_type": "heart_rate",
+            "user_id": "1",
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_complete_chat_reports_hrv_data_source() -> None:
+    """Verify HRV tool calls produce HRV data-source metadata."""
+    inference_client = FakeInferenceClient(tool_name="get_hrv_data")
+    training_client = FakeTrainingClient()
+    orchestrator = AssistantOrchestrator(
+        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        inference_client=inference_client,
+        training_client=training_client,
+    )
+
+    response = await orchestrator.complete_chat(
+        ChatRequest(message="Come sta andando la mia HRV?"),
+        user_id=1,
+    )
+
+    assert response.data_sources[0].type == "garmin_hrv_range"
+    assert training_client.calls == [
+        {
+            "begin_date": "2026-05-04",
+            "end_date": "2026-05-10",
+            "activity_type": "hrv",
             "user_id": "1",
         }
     ]

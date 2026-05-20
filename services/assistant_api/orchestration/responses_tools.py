@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -83,6 +83,31 @@ GET_HEART_RATES_TOOL: dict[str, Any] = {
     },
 }
 
+GET_HRV_DATA_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "get_hrv_data",
+    "description": (
+        "Return Garmin daily heart-rate variability payloads for an inclusive "
+        "date range. Use this for questions about HRV, recovery status, "
+        "overnight recovery, autonomic stress, or readiness trends."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "begin_date": {
+                "type": "string",
+                "description": "Inclusive start date in YYYY-MM-DD format.",
+            },
+            "end_date": {
+                "type": "string",
+                "description": "Inclusive end date in YYYY-MM-DD format.",
+            },
+        },
+        "required": ["begin_date", "end_date"],
+        "additionalProperties": False,
+    },
+}
+
 ANALYZE_NUTRITION_ADHERENCE_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "analyze_nutrition_adherence_period",
@@ -112,6 +137,7 @@ ANALYZE_NUTRITION_ADHERENCE_TOOL: dict[str, Any] = {
 BASE_TOOLS = [
     LIST_ACTIVITIES_TOOL,
     GET_HEART_RATES_TOOL,
+    GET_HRV_DATA_TOOL,
 ]
 
 
@@ -175,6 +201,10 @@ def tool_data_sources(function_calls: list[Any]) -> list[DataSource]:
         "get_heart_rates": DataSource(
             type="garmin_heart_rate_range",
             description="Heart-rate data returned by the local training provider.",
+        ),
+        "get_hrv_data": DataSource(
+            type="garmin_hrv_range",
+            description="HRV data returned by the local training provider.",
         ),
         "analyze_nutrition_adherence_period": DataSource(
             type="nutrition_adherence_analysis",
@@ -272,6 +302,8 @@ class AssistantToolRunner:
             return await self._run_list_activities({**arguments, "_user_id": user_id})
         if tool_name == "get_heart_rates":
             return await self._run_get_heart_rates({**arguments, "_user_id": user_id})
+        if tool_name == "get_hrv_data":
+            return await self._run_get_hrv_data({**arguments, "_user_id": user_id})
         if tool_name == "analyze_nutrition_adherence_period":
             return await self._run_analyze_nutrition_adherence(
                 arguments,
@@ -311,6 +343,21 @@ class AssistantToolRunner:
         )
         LOGGER.info("tool get_heart_rates done day_count=%d", len(heart_rates))
         return json.dumps({"heart_rates": heart_rates}, default=str)
+
+    async def _run_get_hrv_data(self, arguments: dict[str, Any]) -> str:
+        """Run the Garmin HRV range tool."""
+        LOGGER.info(
+            "tool get_hrv_data start begin_date=%s end_date=%s",
+            arguments.get("begin_date"),
+            arguments.get("end_date"),
+        )
+        hrv_data = await self._training_client.get_hrv_data(
+            user_id=arguments["_user_id"],
+            begin_date=arguments["begin_date"],
+            end_date=arguments["end_date"],
+        )
+        LOGGER.info("tool get_hrv_data done day_count=%d", len(hrv_data))
+        return json.dumps({"hrv_data": hrv_data}, default=str)
 
     async def _run_analyze_nutrition_adherence(
         self,

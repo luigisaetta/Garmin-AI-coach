@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-20
 License: MIT
 """
 
@@ -58,6 +58,20 @@ class FakeProvider:
         end_date: str,
     ) -> dict[str, dict[str, str]]:
         """Return one heart-rate payload containing session metadata."""
+        return {
+            begin_date: {
+                "session_storage_path": self.session_storage_path,
+                "end_date": end_date,
+            }
+        }
+
+    def get_hrv_data(
+        self,
+        *,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, str]]:
+        """Return one HRV payload containing session metadata."""
         return {
             begin_date: {
                 "session_storage_path": self.session_storage_path,
@@ -139,3 +153,37 @@ async def test_user_scoped_training_client_rejects_missing_credentials(
         assert "not configured" in str(exc)
     else:
         raise AssertionError("Expected missing Garmin credentials to fail")
+
+
+@pytest.mark.anyio
+async def test_user_scoped_training_client_reads_hrv_data(tmp_path) -> None:
+    """Verify HRV data access uses current user credentials and session path."""
+    database_path = tmp_path / "coach.db"
+    user_id = UserRepository(database_path).ensure_user(username="alice").id
+    repository = GarminCredentialRepository(
+        database_path,
+        encryption_key=Fernet.generate_key(),
+    )
+    repository.save_credentials(
+        user_id=user_id,
+        garmin_username="alice@example.com",
+        garmin_password="alice-secret",
+    )
+    client = UserScopedTrainingDataClient(
+        credential_repository=repository,
+        session_storage_root=tmp_path / "sessions",
+        provider_factory=_provider_factory,
+    )
+
+    hrv_data = await client.get_hrv_data(
+        user_id=user_id,
+        begin_date="2026-05-01",
+        end_date="2026-05-02",
+    )
+
+    assert hrv_data == {
+        "2026-05-01": {
+            "session_storage_path": str(tmp_path / "sessions" / str(user_id)),
+            "end_date": "2026-05-02",
+        }
+    }
