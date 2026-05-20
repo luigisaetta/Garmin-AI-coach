@@ -140,6 +140,15 @@ docker compose build assistant_api
 The script updates `deployment/nginx/auth/.htpasswd` and ensures a matching
 row exists in the SQLite `users` table. It creates one user per run.
 
+The `.htpasswd` file is bind-mounted into the NGINX container and must be
+readable by the container's NGINX worker. If NGINX returns HTTP 500 and logs
+`Permission denied` for `/etc/nginx/auth/.htpasswd`, run:
+
+```bash
+chmod 644 deployment/nginx/auth/.htpasswd
+docker compose restart nginx
+```
+
 After login, open `/account` to save, test, replace, or delete the Garmin
 credentials for the authenticated application user. The backend stores the
 Garmin password encrypted and keeps Garmin session tokens under

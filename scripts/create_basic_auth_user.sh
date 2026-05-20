@@ -54,7 +54,9 @@ fi
 
 mkdir -p "$(dirname "$HTPASSWD_PATH")"
 touch "$HTPASSWD_PATH"
-chmod 600 "$HTPASSWD_PATH"
+# The nginx worker inside the container must be able to read this bind-mounted
+# file. It contains password hashes, not plaintext passwords.
+chmod 644 "$HTPASSWD_PATH"
 
 if command -v htpasswd >/dev/null 2>&1; then
   htpasswd -bB "$HTPASSWD_PATH" "$USERNAME" "$PASSWORD" >/dev/null
@@ -68,6 +70,8 @@ else
   echo "install htpasswd or openssl to update ${HTPASSWD_PATH}" >&2
   exit 1
 fi
+
+chmod 644 "$HTPASSWD_PATH"
 
 if [[ "$USE_COMPOSE" == "1" ]]; then
   docker compose run --rm --no-deps --entrypoint python assistant_api \

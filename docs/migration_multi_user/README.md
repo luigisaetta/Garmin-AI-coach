@@ -144,6 +144,30 @@ python -m services.assistant_api.identity.migrate_user_ids \
   --display-name "Alice Runner"
 ```
 
+Run the migration with the project runtime, Python 3.11 or newer. If the
+database path is the Docker path `/data/garmin_ai_coach.db`, run the command
+inside the assistant API container:
+
+```bash
+docker compose run --rm assistant_api \
+  python -m services.assistant_api.identity.migrate_user_ids \
+    --db-path /data/garmin_ai_coach.db \
+    --initial-username alice \
+    --display-name "Alice Runner"
+```
+
+If running the migration directly on the host, activate the Conda environment
+and pass the host-visible SQLite path instead of the container path:
+
+```bash
+conda activate garmin-ai-coach
+python --version
+python -m services.assistant_api.identity.migrate_user_ids \
+  --db-path /path/on/host/garmin_ai_coach.db \
+  --initial-username alice \
+  --display-name "Alice Runner"
+```
+
 The script ensures the local application user exists, rebuilds legacy
 single-user nutrition tables with `user_id NOT NULL`, backfills existing diary
 and current-plan rows to the initial user, and creates user-scoped indexes.

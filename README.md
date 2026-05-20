@@ -185,6 +185,15 @@ and one matching row in the SQLite `users` table. The username maps to a stable
 internal `user_id` used as the ownership key for Garmin credentials, Garmin
 session storage, nutrition diary entries, and nutrition plans.
 
+The `.htpasswd` file is bind-mounted into the NGINX container and must be
+readable by the container's NGINX worker. If NGINX logs `Permission denied` for
+`/etc/nginx/auth/.htpasswd`, fix the host file permissions and restart NGINX:
+
+```bash
+chmod 644 deployment/nginx/auth/.htpasswd
+docker compose restart nginx
+```
+
 After login, open `/account` to save, test, replace, or delete the current
 user's Garmin credentials. Garmin session tokens are stored in a user-specific
 directory under `GARMIN_SESSION_STORAGE_ROOT`.
