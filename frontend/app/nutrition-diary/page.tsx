@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-15
+ * Last modified: 2026-05-22
  * License: MIT
  */
 
@@ -332,7 +332,7 @@ export default function NutritionDiaryDemo() {
             <Activity size={24} />
           </span>
           <span>
-            <h1>Garmin AI Coach</h1>
+            <h1>Personal Training AI Coach</h1>
             <p>Training intelligence console</p>
           </span>
         </section>
