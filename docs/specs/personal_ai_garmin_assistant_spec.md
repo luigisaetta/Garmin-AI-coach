@@ -73,10 +73,11 @@ The deployment target is:
 
 ## 5. High level architecture
 
-The initial system is composed of two runnable services plus a local Python
-Garmin access layer. In the current initial implementation, the Garmin access
-layer runs inside the assistant backend process behind `TrainingDataProvider`.
-A separate Garmin HTTP service is not part of the current implementation.
+The initial system is composed of the browser-facing frontend, the assistant
+backend, a MySQL CE persistence container, and a local Python Garmin access
+layer. In the current initial implementation, the Garmin access layer runs
+inside the assistant backend process behind `TrainingDataProvider`. A separate
+Garmin HTTP service is not part of the current implementation.
 
 ```text
 Browser
@@ -121,7 +122,7 @@ Assistant backend, Python
 Nutrition diary and plan services
   |
   v
-Local persistence
+MySQL CE local persistence
 
 Assistant backend
   |
@@ -130,9 +131,13 @@ Assistant backend
 OCI Enterprise AI, model openai.gpt-5.4
 ```
 
-The nutrition extension must not introduce an MCP server. The first persistence
-implementation uses SQLite inside the assistant backend service, with the
-database path configured by `NUTRITION_DB_PATH`.
+The nutrition extension must not introduce an MCP server. Local durable
+persistence should use a dedicated MySQL Community Edition container managed by
+Docker Compose. MySQL data files must be persisted on the host filesystem
+through a Docker Compose bind mount or equivalent explicit host-backed storage.
+The earlier SQLite implementation is a transitional implementation detail and
+should be migrated to MySQL before the long-term local deployment is considered
+complete.
 
 The current local architecture includes a multi-user foundation. Authenticated
 requests carry a backend-validated user identity. Backend services use that
@@ -242,16 +247,16 @@ Nutrition services must not:
 * Treat model-generated analysis as a clinical decision
 * Log raw diary entries, uploaded documents, or full nutrition prompts by default
 
-The initial nutrition implementation uses simple local SQLite persistence. The
-SQLite database is local to the assistant backend service and must be stored on
-a Docker volume in container deployments so diary entries and the current
-nutrition plan survive stop and restart. A separate database container is not
-part of the initial nutrition MVP.
+The local nutrition implementation should use simple MySQL persistence through
+the assistant backend service. The MySQL database runs in a dedicated Docker
+Compose service, and its data directory must be backed by the host filesystem
+so diary entries and the current nutrition plan survive container rebuilds,
+stop/start cycles, and service restarts.
 
 The initial nutrition-plan implementation stores one current plan. Uploading a
 new PDF replaces the previous current plan. The backend extracts all available
 text from the uploaded PDF and stores the extracted text plus metadata in
-SQLite. The original PDF file is not retained in the MVP.
+MySQL. The original PDF file is not retained in the MVP.
 
 In multi-user mode, the "current plan" is per user. Uploading a nutrition plan
 must replace only the authenticated user's current plan. Nutrition endpoints
@@ -304,13 +309,13 @@ repository with these responsibilities:
 * Allow credentials to be replaced or removed for one user without affecting
   other users.
 
-If encrypted local SQLite storage is used for the first multi-user iteration,
-the encryption key must not be stored in SQLite or committed to the repository.
-A future deployment may replace the local credential repository with a dedicated
-secret manager without changing assistant tool contracts.
+If encrypted local database storage is used for the first multi-user iteration,
+the encryption key must not be stored in the database or committed to the
+repository. A future deployment may replace the local credential repository
+with a dedicated secret manager without changing assistant tool contracts.
 
-The first local implementation uses SQLite for one Garmin credential record per
-application user and encrypts the Garmin password with Fernet. The Fernet key is
+The long-term local implementation uses MySQL for one Garmin credential record
+per application user and encrypts the Garmin password with Fernet. The Fernet key is
 provided through `GARMIN_CREDENTIAL_ENCRYPTION_KEY` or a mounted secret file
 referenced by `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`. User-scoped Garmin
 session tokens are stored under `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
@@ -319,11 +324,13 @@ session tokens are stored under `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
 
 Docker Compose should define at least these services:
 
+* `mysql`, MySQL Community Edition database
 * `frontend`, Next.js application
 * `assistant_api`, Python assistant backend
 
 Suggested internal ports:
 
+* `mysql`, internal only
 * `frontend`, exposed to the host
 * `assistant_api`, internal plus optionally exposed for local debugging
 
@@ -333,6 +340,7 @@ Example logical flow:
 
 ```text
 frontend -> http://assistant_api:<port>
+assistant_api -> mysql:<port>
 assistant_api -> local Python TrainingDataProvider
 assistant_api -> OCI Enterprise AI endpoint
 ```
@@ -343,12 +351,13 @@ architectural change and must update this specification before implementation.
 
 The nutrition extension should initially run inside the assistant backend
 service behind local Python service boundaries. Adding a separate nutrition API
-container, document-processing worker, or database container is an architectural
-change and must update this specification before implementation.
+container or document-processing worker is an architectural change and must
+update this specification before implementation.
 
-For the nutrition diary MVP, Docker Compose should mount a named volume at
-`/data` in the assistant backend container and default `NUTRITION_DB_PATH` to
-`/data/garmin_ai_coach.db`.
+Docker Compose should mount the MySQL data directory to an explicit host
+filesystem path, such as `./data/mysql:/var/lib/mysql`, or to an equivalent
+operator-selected host path. The assistant backend should connect through
+database connection environment variables rather than local database file paths.
 
 ## 8. Backend implementation approach
 
@@ -785,7 +794,8 @@ Likely configuration values:
 * OCI model identifier, default `openai.gpt-5.4`
 * Assistant API URL for the frontend
 * Log level
-* Nutrition storage path, when the nutrition extension is implemented
+* MySQL host, port, database name, username, and password or mounted secret
+  reference
 * Nutrition upload size limit, when document upload is implemented
 * Nutrition document retention policy, when document upload is implemented
 
@@ -964,20 +974,25 @@ Status: implemented.
 
 Status: partially implemented. The current MVP includes diary persistence, PDF
 plan upload, extracted-text storage, and on-demand adherence analysis through
-assistant tooling. Remaining work is mostly product depth and API polish.
+assistant tooling. Persistence currently uses SQLite, but the target local
+deployment has been changed to MySQL CE. Remaining work is mostly product depth,
+API polish, and the SQLite-to-MySQL migration.
 
 Implemented:
 
 * Nutrition section in the Next.js frontend
 * Food diary entry creation and single-day retrieval
 * PDF nutrition-plan upload with extracted text storage
-* User-scoped local SQLite nutrition persistence
+* User-scoped local nutrition persistence, currently implemented with SQLite
 * On-demand adherence report via `analyze_nutrition_adherence_period`
 * Safe nutrition analysis prompt limits
 * Tests with local fixtures and mocked model calls
 
 Not yet implemented:
 
+* MySQL CE persistence backend for identity, Garmin credential metadata,
+  nutrition diary entries, and nutrition plans
+* One-shot migration path from the current SQLite database to MySQL
 * Date-range diary listing endpoint for frontend browsing
 * Dedicated weekly report endpoint outside chat/tool orchestration
 * Markdown nutrition-plan upload
@@ -1044,6 +1059,9 @@ Resolved implementation choices:
 * Should each user have exactly one Garmin account, or should multiple Garmin
   accounts per application user be supported later?
   The current model supports one Garmin credential record per application user.
+* Should the long-term local deployment use SQLite or a database service?
+  The long-term local deployment should use MySQL Community Edition in Docker
+  Compose with host-filesystem-backed database storage.
 
 Still open:
 
@@ -1064,6 +1082,7 @@ Any architectural change must update this specification.
 Examples of architectural changes:
 
 * Adding a database
+* Changing the persistence engine or database service topology
 * Adding a cache
 * Adding multi-user authentication or authorization
 * Adding a credential store for per-user Garmin secrets

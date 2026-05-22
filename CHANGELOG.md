@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-05-22
+
+### Changed
+
+- Updated the project specification to make MySQL Community Edition the
+  long-term local persistence target for Docker Compose deployments.
+- Documented the dedicated MySQL container, host-filesystem-backed storage, and
+  future SQLite-to-MySQL migration requirement for identity, Garmin credential
+  metadata, nutrition diary entries, and nutrition plans.
+
+### Verified
+
+- Documentation-only update; no application code changed.
+
 ## 2026-05-15
 
 ### Added
