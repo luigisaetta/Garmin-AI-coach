@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -25,6 +25,7 @@ from services.assistant_api.nutrition.diary import (
 )
 from services.assistant_api.nutrition.plan import NutritionPlanService
 from services.assistant_api.identity.users import UserRepository
+from services.assistant_api.tests.database import build_test_database
 
 
 class FakeResponses:
@@ -152,10 +153,10 @@ def test_nutrition_analysis_subagent_runs_linear_graph(tmp_path) -> None:
 
 async def _run_subagent_graph_assertions(tmp_path) -> None:
     """Run async subagent assertions without requiring pytest async plugins."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = UserRepository(database_path).ensure_user(username="alice").id
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = UserRepository(database).ensure_user(username="alice").id
     plan_service = NutritionPlanService(
-        database_path,
+        database,
         text_extractor=lambda _: "Breakfast: oats. Lunch: rice and protein.",
     )
     plan_service.replace_current_plan(
@@ -164,7 +165,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
         content_type="application/pdf",
         pdf_bytes=b"plan",
     )
-    diary_service = NutritionDiaryService(database_path)
+    diary_service = NutritionDiaryService(database)
     diary_service.upsert_entry(
         user_id=user_id,
         entry_input=NutritionDiaryEntryInput(

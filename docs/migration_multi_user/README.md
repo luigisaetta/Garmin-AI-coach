@@ -10,7 +10,8 @@ small multi-user solution while preserving the current architecture:
 * Next.js frontend
 * Python assistant backend
 * local Python Garmin provider boundary
-* SQLite-backed local persistence for the initial nutrition implementation
+* MySQL-backed local persistence for users, Garmin credential metadata,
+  nutrition diary entries, and nutrition plans
 * Docker Compose deployment on the local Intel NUC target
 * no MCP server
 
@@ -115,62 +116,71 @@ key is used as `user_id` in user-owned tables.
 The implemented provisioning workflow is
 `scripts/create_basic_auth_user.sh USERNAME [DISPLAY_NAME]`. The script creates
 or updates the `.htpasswd` entry and ensures a matching row exists in the
-SQLite `users` table. It can be run through Docker Compose for the default
-container database path or locally with `USE_COMPOSE=0`.
+MySQL `users` table. It can be run through Docker Compose for the default
+database service or locally with `USE_COMPOSE=0` and matching `MYSQL_*`
+environment variables.
 
 A later admin-only UI can be added after the local model is stable.
 
 ## Existing Data Migration
 
-Existing single-user nutrition storage can be migrated before enabling
-multi-user behavior, or a deployment can start with an empty database.
+Existing SQLite storage can be migrated into the MySQL deployment, or a
+deployment can start with an empty database.
 
-Preserving existing data uses this deterministic migration:
+Preserving old single-user nutrition data uses this deterministic migration:
 
-1. Create or select the initial application user.
-2. Add `user_id` columns to user-owned tables.
-3. Backfill existing rows with the initial user's `user_id`.
-4. Add constraints and indexes after backfill.
+1. Start the MySQL service.
+2. Create or select the initial application user.
+3. Copy legacy SQLite rows into MySQL.
+4. Backfill legacy nutrition rows without `user_id` to the initial user's
+   `user_id`.
+5. Preserve existing multi-user `users`, Garmin credential metadata, diary
+   entries, and nutrition plans when the SQLite source already has user-owned
+   tables.
 
 The safer schema target is to enforce user ownership in the database, not only
 in Python service code.
 
-The local migration script for this step is:
+The current migration script is:
 
 ```bash
-python -m services.assistant_api.identity.migrate_user_ids \
-  --db-path /data/garmin_ai_coach.db \
-  --initial-username alice \
-  --display-name "Alice Runner"
+docker compose up -d mysql
+docker compose run --rm \
+  --volume /absolute/host/path/garmin_ai_coach.db:/migration/garmin_ai_coach.db:ro \
+  assistant_api \
+  python -m services.assistant_api.persistence.migrate_sqlite_to_mysql \
+    --sqlite-path /migration/garmin_ai_coach.db \
+    --initial-username alice
 ```
 
-Run the migration with the project runtime, Python 3.11 or newer. If the
-database path is the Docker path `/data/garmin_ai_coach.db`, run the command
-inside the assistant API container:
+If the SQLite source already contains the multi-user `users` table and
+`user_id` columns, omit `--initial-username`:
 
 ```bash
-docker compose run --rm assistant_api \
-  python -m services.assistant_api.identity.migrate_user_ids \
-    --db-path /data/garmin_ai_coach.db \
-    --initial-username alice \
-    --display-name "Alice Runner"
+docker compose run --rm \
+  --volume /absolute/host/path/garmin_ai_coach.db:/migration/garmin_ai_coach.db:ro \
+  assistant_api \
+  python -m services.assistant_api.persistence.migrate_sqlite_to_mysql \
+    --sqlite-path /migration/garmin_ai_coach.db
 ```
 
-If running the migration directly on the host, activate the Conda environment
-and pass the host-visible SQLite path instead of the container path:
+If running the migration directly on the host, activate the Conda environment,
+set `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and
+`MYSQL_PASSWORD`, and pass the host-visible SQLite path:
 
 ```bash
 conda activate garmin-ai-coach
 python --version
-python -m services.assistant_api.identity.migrate_user_ids \
-  --db-path /path/on/host/garmin_ai_coach.db \
-  --initial-username alice \
-  --display-name "Alice Runner"
+python -m services.assistant_api.persistence.migrate_sqlite_to_mysql \
+  --sqlite-path /path/on/host/garmin_ai_coach.db \
+  --initial-username alice
 ```
 
-The script ensures the local application user exists, rebuilds legacy
-single-user nutrition tables with `user_id NOT NULL`, backfills existing diary
-and current-plan rows to the initial user, and creates user-scoped indexes.
+The script creates the target schema when needed and copies local application
+users, encrypted Garmin credential metadata, nutrition diary entries, and
+current nutrition plans. The older
+`services.assistant_api.identity.migrate_user_ids` command remains available
+only for in-place normalization of a legacy SQLite file before a MySQL copy.
 
 ## Nutrition Schema Changes
 
@@ -203,7 +213,7 @@ responsibilities:
   other users.
 
 The implemented local MVP stores one Garmin credential row per `user_id` in
-SQLite. The Garmin password is encrypted with Fernet using
+MySQL. The Garmin password is encrypted with Fernet using
 `GARMIN_CREDENTIAL_ENCRYPTION_KEY` or `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`.
 Only safe status metadata is returned to frontend clients.
 
@@ -219,7 +229,7 @@ Implemented first step:
 
 * Use a server-side encryption key supplied through an environment variable or
   mounted secret file.
-* Do not store the encryption key in SQLite.
+* Do not store the encryption key in MySQL.
 * Do not commit the encryption key.
 * Use `cryptography.Fernet` for symmetric encryption.
 

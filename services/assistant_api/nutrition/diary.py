@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -8,10 +8,13 @@ from __future__ import annotations
 
 # pylint: disable=duplicate-code
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from pathlib import Path
+
+from sqlalchemy import select
+
+from services.assistant_api.persistence import Database
+from services.assistant_api.persistence.schema import nutrition_diary_entries
 
 
 @dataclass(frozen=True)
@@ -39,12 +42,10 @@ class NutritionDiaryEntryInput:
 
 
 class NutritionDiaryService:
-    """Persist nutrition diary entries in a local SQLite database."""
+    """Persist nutrition diary entries in the assistant database."""
 
-    def __init__(self, database_path: str | Path) -> None:
-        self._database_path = Path(database_path)
-        self._database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize_schema()
+    def __init__(self, database: Database) -> None:
+        self._database = database
 
     def upsert_entry(
         self,
@@ -54,35 +55,41 @@ class NutritionDiaryService:
     ) -> NutritionDiaryEntry:
         """Create or update the diary entry for one day."""
         now = _utc_now()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO nutrition_diary_entries (
-                    user_id,
-                    entry_date,
-                    training_type,
-                    meals_text,
-                    notes,
-                    created_at,
-                    updated_at
+        with self._database.engine.begin() as connection:
+            existing = (
+                connection.execute(
+                    select(nutrition_diary_entries.c.id).where(
+                        nutrition_diary_entries.c.user_id == user_id,
+                        nutrition_diary_entries.c.entry_date
+                        == entry_input.entry_date.isoformat(),
+                    )
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, entry_date) DO UPDATE SET
-                    training_type = excluded.training_type,
-                    meals_text = excluded.meals_text,
-                    notes = excluded.notes,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    user_id,
-                    entry_input.entry_date.isoformat(),
-                    entry_input.training_type,
-                    entry_input.meals_text,
-                    entry_input.notes,
-                    now.isoformat(),
-                    now.isoformat(),
-                ),
+                .mappings()
+                .fetchone()
             )
+            if existing is None:
+                connection.execute(
+                    nutrition_diary_entries.insert().values(
+                        user_id=user_id,
+                        entry_date=entry_input.entry_date.isoformat(),
+                        training_type=entry_input.training_type,
+                        meals_text=entry_input.meals_text,
+                        notes=entry_input.notes,
+                        created_at=now.isoformat(),
+                        updated_at=now.isoformat(),
+                    )
+                )
+            else:
+                connection.execute(
+                    nutrition_diary_entries.update()
+                    .where(nutrition_diary_entries.c.id == existing["id"])
+                    .values(
+                        training_type=entry_input.training_type,
+                        meals_text=entry_input.meals_text,
+                        notes=entry_input.notes,
+                        updated_at=now.isoformat(),
+                    )
+                )
 
         entry = self.get_entry(user_id=user_id, entry_date=entry_input.entry_date)
         if entry is None:
@@ -93,23 +100,26 @@ class NutritionDiaryService:
         self, *, user_id: int, entry_date: date
     ) -> NutritionDiaryEntry | None:
         """Return the diary entry for one day, when present."""
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT
-                    id,
-                    user_id,
-                    entry_date,
-                    training_type,
-                    meals_text,
-                    notes,
-                    created_at,
-                    updated_at
-                FROM nutrition_diary_entries
-                WHERE user_id = ? AND entry_date = ?
-                """,
-                (user_id, entry_date.isoformat()),
-            ).fetchone()
+        with self._database.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(
+                        nutrition_diary_entries.c.id,
+                        nutrition_diary_entries.c.user_id,
+                        nutrition_diary_entries.c.entry_date,
+                        nutrition_diary_entries.c.training_type,
+                        nutrition_diary_entries.c.meals_text,
+                        nutrition_diary_entries.c.notes,
+                        nutrition_diary_entries.c.created_at,
+                        nutrition_diary_entries.c.updated_at,
+                    ).where(
+                        nutrition_diary_entries.c.user_id == user_id,
+                        nutrition_diary_entries.c.entry_date == entry_date.isoformat(),
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
 
         if row is None:
             return None
@@ -127,62 +137,35 @@ class NutritionDiaryService:
         if begin_date > end_date:
             raise ValueError("begin_date must be before or equal to end_date")
 
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT
-                    id,
-                    user_id,
-                    entry_date,
-                    training_type,
-                    meals_text,
-                    notes,
-                    created_at,
-                    updated_at
-                FROM nutrition_diary_entries
-                WHERE user_id = ? AND entry_date >= ? AND entry_date <= ?
-                ORDER BY entry_date ASC
-                """,
-                (user_id, begin_date.isoformat(), end_date.isoformat()),
-            ).fetchall()
+        with self._database.engine.connect() as connection:
+            rows = (
+                connection.execute(
+                    select(
+                        nutrition_diary_entries.c.id,
+                        nutrition_diary_entries.c.user_id,
+                        nutrition_diary_entries.c.entry_date,
+                        nutrition_diary_entries.c.training_type,
+                        nutrition_diary_entries.c.meals_text,
+                        nutrition_diary_entries.c.notes,
+                        nutrition_diary_entries.c.created_at,
+                        nutrition_diary_entries.c.updated_at,
+                    )
+                    .where(
+                        nutrition_diary_entries.c.user_id == user_id,
+                        nutrition_diary_entries.c.entry_date >= begin_date.isoformat(),
+                        nutrition_diary_entries.c.entry_date <= end_date.isoformat(),
+                    )
+                    .order_by(nutrition_diary_entries.c.entry_date.asc())
+                )
+                .mappings()
+                .fetchall()
+            )
 
         return [_entry_from_row(row) for row in rows]
 
-    def _initialize_schema(self) -> None:
-        """Create database tables needed by the nutrition diary service."""
-        with self._connect() as connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS nutrition_diary_entries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    entry_date TEXT NOT NULL,
-                    training_type TEXT NOT NULL,
-                    meals_text TEXT NOT NULL,
-                    notes TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-                """)
-            connection.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_diary_user_entry_date
-                ON nutrition_diary_entries(user_id, entry_date)
-                """)
-            connection.execute("""
-                CREATE INDEX IF NOT EXISTS idx_nutrition_diary_user_date_range
-                ON nutrition_diary_entries(user_id, entry_date)
-                """)
 
-    def _connect(self) -> sqlite3.Connection:
-        """Open a SQLite connection configured for row-based reads."""
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
-
-
-def _entry_from_row(row: sqlite3.Row) -> NutritionDiaryEntry:
-    """Convert a SQLite row to a typed diary entry."""
+def _entry_from_row(row) -> NutritionDiaryEntry:
+    """Convert a database row to a typed diary entry."""
     return NutritionDiaryEntry(
         id=row["id"],
         user_id=row["user_id"],

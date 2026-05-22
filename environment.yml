@@ -15,7 +15,9 @@ dependencies:
       - pydantic
       - pypdf
       - pylint
+      - pymysql
       - pytest
       - python-dotenv
       - python-multipart
+      - sqlalchemy
       - uvicorn

@@ -12,8 +12,10 @@ RUN pip install --no-cache-dir \
     openai \
     pydantic \
     pypdf \
+    pymysql \
     python-dotenv \
     python-multipart \
+    sqlalchemy \
     uvicorn
 
 COPY services ./services

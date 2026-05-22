@@ -7,12 +7,11 @@ Usage:
   scripts/create_basic_auth_user.sh USERNAME [DISPLAY_NAME]
 
 Creates or updates one Basic Auth user and ensures the matching application
-user row exists in SQLite.
+user row exists in MySQL.
 
 Environment overrides:
   HTPASSWD_PATH  default: deployment/nginx/auth/.htpasswd
-  APP_DB_PATH    default in compose: /data/garmin_ai_coach.db
-  USE_COMPOSE    default: 1. Set to 0 to update APP_DB_PATH locally.
+  USE_COMPOSE    default: 1. Set to 0 to use local MySQL environment variables.
 USAGE
 }
 
@@ -29,7 +28,6 @@ fi
 USERNAME="$1"
 DISPLAY_NAME="${2:-$1}"
 HTPASSWD_PATH="${HTPASSWD_PATH:-deployment/nginx/auth/.htpasswd}"
-APP_DB_PATH="${APP_DB_PATH:-/data/garmin_ai_coach.db}"
 USE_COMPOSE="${USE_COMPOSE:-1}"
 
 if [[ "$USERNAME" =~ [[:space:]] || -z "$USERNAME" ]]; then
@@ -74,15 +72,13 @@ fi
 chmod 644 "$HTPASSWD_PATH"
 
 if [[ "$USE_COMPOSE" == "1" ]]; then
-  docker compose run --rm --no-deps --entrypoint python assistant_api \
+  docker compose run --rm --entrypoint python assistant_api \
     -m services.assistant_api.identity.users \
-    --db-path "$APP_DB_PATH" \
     ensure-user \
     --username "$USERNAME" \
     --display-name "$DISPLAY_NAME"
 else
   python -m services.assistant_api.identity.users \
-    --db-path "$APP_DB_PATH" \
     ensure-user \
     --username "$USERNAME" \
     --display-name "$DISPLAY_NAME"

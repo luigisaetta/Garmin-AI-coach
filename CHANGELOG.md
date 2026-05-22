@@ -9,10 +9,17 @@
 - Documented the dedicated MySQL container, host-filesystem-backed storage, and
   future SQLite-to-MySQL migration requirement for identity, Garmin credential
   metadata, nutrition diary entries, and nutrition plans.
+- Added a Docker Compose MySQL CE service with host-backed data storage.
+- Replaced runtime SQLite repository access with a confined SQLAlchemy Core
+  persistence layer using MySQL configuration from environment variables.
+- Added a SQLite-to-MySQL migration command for local users, encrypted Garmin
+  credential metadata, nutrition diary entries, and current nutrition plans.
+- Updated README, Quickstart, and multi-user migration notes for the MySQL
+  deployment model.
 
 ### Verified
 
-- Documentation-only update; no application code changed.
+- Targeted backend persistence tests pass.
 
 ## 2026-05-15
 

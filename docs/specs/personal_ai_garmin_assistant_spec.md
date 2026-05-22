@@ -135,9 +135,8 @@ The nutrition extension must not introduce an MCP server. Local durable
 persistence should use a dedicated MySQL Community Edition container managed by
 Docker Compose. MySQL data files must be persisted on the host filesystem
 through a Docker Compose bind mount or equivalent explicit host-backed storage.
-The earlier SQLite implementation is a transitional implementation detail and
-should be migrated to MySQL before the long-term local deployment is considered
-complete.
+Legacy SQLite files can be migrated to MySQL with the repository migration
+script before the long-term local deployment is considered complete.
 
 The current local architecture includes a multi-user foundation. Authenticated
 requests carry a backend-validated user identity. Backend services use that
@@ -973,26 +972,23 @@ Status: implemented.
 ### Milestone 6, nutrition adherence extension
 
 Status: partially implemented. The current MVP includes diary persistence, PDF
-plan upload, extracted-text storage, and on-demand adherence analysis through
-assistant tooling. Persistence currently uses SQLite, but the target local
-deployment has been changed to MySQL CE. Remaining work is mostly product depth,
-API polish, and the SQLite-to-MySQL migration.
+plan upload, extracted-text storage, MySQL-backed local persistence, and
+on-demand adherence analysis through assistant tooling. Remaining work is mostly
+product depth and API polish.
 
 Implemented:
 
 * Nutrition section in the Next.js frontend
 * Food diary entry creation and single-day retrieval
 * PDF nutrition-plan upload with extracted text storage
-* User-scoped local nutrition persistence, currently implemented with SQLite
+* User-scoped local MySQL nutrition persistence
 * On-demand adherence report via `analyze_nutrition_adherence_period`
 * Safe nutrition analysis prompt limits
+* One-shot migration path from the legacy SQLite database to MySQL
 * Tests with local fixtures and mocked model calls
 
 Not yet implemented:
 
-* MySQL CE persistence backend for identity, Garmin credential metadata,
-  nutrition diary entries, and nutrition plans
-* One-shot migration path from the current SQLite database to MySQL
 * Date-range diary listing endpoint for frontend browsing
 * Dedicated weekly report endpoint outside chat/tool orchestration
 * Markdown nutrition-plan upload

@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -10,18 +10,20 @@ from __future__ import annotations
 
 from services.assistant_api.nutrition.plan import NutritionPlanService
 from services.assistant_api.identity.users import UserRepository
+from services.assistant_api.persistence import Database
+from services.assistant_api.tests.database import build_test_database
 
 
-def _create_user(database_path, username: str = "alice") -> int:
-    return UserRepository(database_path).ensure_user(username=username).id
+def _create_user(database: Database, username: str = "alice") -> int:
+    return UserRepository(database).ensure_user(username=username).id
 
 
 def test_replace_current_plan_creates_plan(tmp_path) -> None:
     """Verify the nutrition plan service stores extracted PDF text."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
     service = NutritionPlanService(
-        database_path,
+        database,
         text_extractor=lambda _: "Breakfast plan\nLunch plan",
     )
 
@@ -43,10 +45,10 @@ def test_replace_current_plan_creates_plan(tmp_path) -> None:
 
 def test_replace_current_plan_overwrites_existing_plan(tmp_path) -> None:
     """Verify only one current nutrition plan is retained."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
     service = NutritionPlanService(
-        database_path,
+        database,
         text_extractor=lambda pdf_bytes: pdf_bytes.decode("utf-8"),
     )
     original = service.replace_current_plan(
@@ -71,19 +73,19 @@ def test_replace_current_plan_overwrites_existing_plan(tmp_path) -> None:
 
 def test_get_current_plan_returns_none_when_missing(tmp_path) -> None:
     """Verify missing nutrition plans can be distinguished from empty text."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionPlanService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionPlanService(database)
 
     assert service.get_current_plan(user_id=user_id) is None
 
 
 def test_replace_current_plan_rejects_pdf_without_text(tmp_path) -> None:
     """Verify empty extracted text is not stored as a usable plan."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
     service = NutritionPlanService(
-        database_path,
+        database,
         text_extractor=lambda _: "   ",
     )
 
@@ -102,11 +104,11 @@ def test_replace_current_plan_rejects_pdf_without_text(tmp_path) -> None:
 
 def test_current_plan_is_isolated_by_user_id(tmp_path) -> None:
     """Verify each user has a separate current nutrition plan."""
-    database_path = tmp_path / "nutrition.db"
-    alice_id = _create_user(database_path, "alice")
-    bob_id = _create_user(database_path, "bob")
+    database = build_test_database(tmp_path, "nutrition.db")
+    alice_id = _create_user(database, "alice")
+    bob_id = _create_user(database, "bob")
     service = NutritionPlanService(
-        database_path,
+        database,
         text_extractor=lambda pdf_bytes: pdf_bytes.decode("utf-8"),
     )
 

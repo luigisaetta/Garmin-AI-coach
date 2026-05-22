@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -9,15 +9,17 @@ from __future__ import annotations
 # pylint: disable=duplicate-code
 
 import hashlib
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import Path
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
+from sqlalchemy import select
+
+from services.assistant_api.persistence import Database
+from services.assistant_api.persistence.schema import nutrition_plan_current
 
 
 @dataclass(frozen=True)
@@ -35,19 +37,17 @@ class NutritionPlan:  # pylint: disable=too-many-instance-attributes
 
 
 class NutritionPlanService:
-    """Persist a single current nutrition plan in a local SQLite database."""
+    """Persist a single current nutrition plan in the assistant database."""
 
     CURRENT_PLAN_ID = 1
 
     def __init__(
         self,
-        database_path: str | Path,
+        database: Database,
         text_extractor: Callable[[bytes], str] | None = None,
     ) -> None:
-        self._database_path = Path(database_path)
+        self._database = database
         self._text_extractor = text_extractor or extract_pdf_text
-        self._database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize_schema()
 
     def replace_current_plan(
         self,
@@ -64,37 +64,41 @@ class NutritionPlanService:
 
         now = _utc_now()
         file_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO nutrition_plan_current (
-                    user_id,
-                    original_filename,
-                    content_type,
-                    file_sha256,
-                    extracted_text,
-                    uploaded_at,
-                    updated_at
+        with self._database.engine.begin() as connection:
+            existing = (
+                connection.execute(
+                    select(nutrition_plan_current.c.id).where(
+                        nutrition_plan_current.c.user_id == user_id
+                    )
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    original_filename = excluded.original_filename,
-                    content_type = excluded.content_type,
-                    file_sha256 = excluded.file_sha256,
-                    extracted_text = excluded.extracted_text,
-                    uploaded_at = excluded.uploaded_at,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    user_id,
-                    original_filename,
-                    content_type,
-                    file_sha256,
-                    extracted_text,
-                    now.isoformat(),
-                    now.isoformat(),
-                ),
+                .mappings()
+                .fetchone()
             )
+            if existing is None:
+                connection.execute(
+                    nutrition_plan_current.insert().values(
+                        user_id=user_id,
+                        original_filename=original_filename,
+                        content_type=content_type,
+                        file_sha256=file_sha256,
+                        extracted_text=extracted_text,
+                        uploaded_at=now.isoformat(),
+                        updated_at=now.isoformat(),
+                    )
+                )
+            else:
+                connection.execute(
+                    nutrition_plan_current.update()
+                    .where(nutrition_plan_current.c.id == existing["id"])
+                    .values(
+                        original_filename=original_filename,
+                        content_type=content_type,
+                        file_sha256=file_sha256,
+                        extracted_text=extracted_text,
+                        uploaded_at=now.isoformat(),
+                        updated_at=now.isoformat(),
+                    )
+                )
 
         plan = self.get_current_plan(user_id=user_id)
         if plan is None:
@@ -103,56 +107,28 @@ class NutritionPlanService:
 
     def get_current_plan(self, *, user_id: int) -> NutritionPlan | None:
         """Return the current nutrition plan, when one has been uploaded."""
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT
-                    id,
-                    user_id,
-                    original_filename,
-                    content_type,
-                    file_sha256,
-                    extracted_text,
-                    uploaded_at,
-                    updated_at
-                FROM nutrition_plan_current
-                WHERE user_id = ?
-                """,
-                (user_id,),
-            ).fetchone()
+        with self._database.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(
+                        nutrition_plan_current.c.id,
+                        nutrition_plan_current.c.user_id,
+                        nutrition_plan_current.c.original_filename,
+                        nutrition_plan_current.c.content_type,
+                        nutrition_plan_current.c.file_sha256,
+                        nutrition_plan_current.c.extracted_text,
+                        nutrition_plan_current.c.uploaded_at,
+                        nutrition_plan_current.c.updated_at,
+                    ).where(nutrition_plan_current.c.user_id == user_id)
+                )
+                .mappings()
+                .fetchone()
+            )
 
         if row is None:
             return None
 
         return _plan_from_row(row)
-
-    def _initialize_schema(self) -> None:
-        """Create database tables needed by the nutrition plan service."""
-        with self._connect() as connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS nutrition_plan_current (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL UNIQUE,
-                    original_filename TEXT NOT NULL,
-                    content_type TEXT NOT NULL,
-                    file_sha256 TEXT NOT NULL,
-                    extracted_text TEXT NOT NULL,
-                    uploaded_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
-                )
-                """)
-            connection.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_plan_current_user
-                ON nutrition_plan_current(user_id)
-                """)
-
-    def _connect(self) -> sqlite3.Connection:
-        """Open a SQLite connection configured for row-based reads."""
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> str:
@@ -166,7 +142,7 @@ def extract_pdf_text(pdf_bytes: bytes) -> str:
     return "\n\n".join(text.strip() for text in page_text if text.strip())
 
 
-def _plan_from_row(row: sqlite3.Row) -> NutritionPlan:
+def _plan_from_row(row) -> NutritionPlan:
     """Convert a SQLite row to a typed nutrition plan."""
     return NutritionPlan(
         id=row["id"],

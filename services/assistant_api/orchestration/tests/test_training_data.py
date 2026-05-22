@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-20
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -16,6 +16,7 @@ from services.assistant_api.identity.users import UserRepository
 from services.assistant_api.orchestration.training_data import (
     UserScopedTrainingDataClient,
 )
+from services.assistant_api.tests.database import build_test_database
 
 
 class FakeProvider:
@@ -90,10 +91,10 @@ async def test_user_scoped_training_client_uses_current_user_credentials(
     tmp_path,
 ) -> None:
     """Verify Garmin credentials and session storage are scoped per user."""
-    database_path = tmp_path / "coach.db"
-    user_id = UserRepository(database_path).ensure_user(username="alice").id
+    database = build_test_database(tmp_path)
+    user_id = UserRepository(database).ensure_user(username="alice").id
     repository = GarminCredentialRepository(
-        database_path,
+        database,
         encryption_key=Fernet.generate_key(),
     )
     repository.save_credentials(
@@ -131,10 +132,10 @@ async def test_user_scoped_training_client_rejects_missing_credentials(
     tmp_path,
 ) -> None:
     """Verify Garmin data access fails when credentials are not configured."""
-    database_path = tmp_path / "coach.db"
-    user_id = UserRepository(database_path).ensure_user(username="alice").id
+    database = build_test_database(tmp_path)
+    user_id = UserRepository(database).ensure_user(username="alice").id
     repository = GarminCredentialRepository(
-        database_path,
+        database,
         encryption_key=Fernet.generate_key(),
     )
     client = UserScopedTrainingDataClient(
@@ -158,10 +159,10 @@ async def test_user_scoped_training_client_rejects_missing_credentials(
 @pytest.mark.anyio
 async def test_user_scoped_training_client_reads_hrv_data(tmp_path) -> None:
     """Verify HRV data access uses current user credentials and session path."""
-    database_path = tmp_path / "coach.db"
-    user_id = UserRepository(database_path).ensure_user(username="alice").id
+    database = build_test_database(tmp_path)
+    user_id = UserRepository(database).ensure_user(username="alice").id
     repository = GarminCredentialRepository(
-        database_path,
+        database,
         encryption_key=Fernet.generate_key(),
     )
     repository.save_credentials(

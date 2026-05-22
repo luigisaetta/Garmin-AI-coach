@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -13,17 +13,19 @@ from services.assistant_api.nutrition.diary import (
     NutritionDiaryService,
 )
 from services.assistant_api.identity.users import UserRepository
+from services.assistant_api.persistence import Database
+from services.assistant_api.tests.database import build_test_database
 
 
-def _create_user(database_path, username: str = "alice") -> int:
-    return UserRepository(database_path).ensure_user(username=username).id
+def _create_user(database: Database, username: str = "alice") -> int:
+    return UserRepository(database).ensure_user(username=username).id
 
 
 def test_upsert_creates_diary_entry(tmp_path) -> None:
     """Verify the diary service persists a new daily entry."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionDiaryService(database)
 
     entry = service.upsert_entry(
         user_id=user_id,
@@ -46,9 +48,9 @@ def test_upsert_creates_diary_entry(tmp_path) -> None:
 
 def test_upsert_updates_existing_diary_entry(tmp_path) -> None:
     """Verify one calendar day is updated instead of duplicated."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionDiaryService(database)
     original = service.upsert_entry(
         user_id=user_id,
         entry_input=NutritionDiaryEntryInput(
@@ -79,18 +81,18 @@ def test_upsert_updates_existing_diary_entry(tmp_path) -> None:
 
 def test_get_entry_returns_none_for_missing_day(tmp_path) -> None:
     """Verify missing days can be distinguished from empty entries."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionDiaryService(database)
 
     assert service.get_entry(user_id=user_id, entry_date=date(2026, 5, 12)) is None
 
 
 def test_list_entries_returns_entries_in_inclusive_date_range(tmp_path) -> None:
     """Verify diary entries can be read for an inclusive analysis period."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionDiaryService(database)
     service.upsert_entry(
         user_id=user_id,
         entry_input=NutritionDiaryEntryInput(
@@ -130,9 +132,9 @@ def test_list_entries_returns_entries_in_inclusive_date_range(tmp_path) -> None:
 
 def test_list_entries_rejects_invalid_range(tmp_path) -> None:
     """Verify diary range reads reject a start date after the end date."""
-    database_path = tmp_path / "nutrition.db"
-    user_id = _create_user(database_path)
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    user_id = _create_user(database)
+    service = NutritionDiaryService(database)
 
     try:
         service.list_entries(
@@ -148,10 +150,10 @@ def test_list_entries_rejects_invalid_range(tmp_path) -> None:
 
 def test_entries_are_isolated_by_user_id(tmp_path) -> None:
     """Verify users can keep distinct diary entries on the same date."""
-    database_path = tmp_path / "nutrition.db"
-    alice_id = _create_user(database_path, "alice")
-    bob_id = _create_user(database_path, "bob")
-    service = NutritionDiaryService(database_path)
+    database = build_test_database(tmp_path, "nutrition.db")
+    alice_id = _create_user(database, "alice")
+    bob_id = _create_user(database, "bob")
+    service = NutritionDiaryService(database)
 
     service.upsert_entry(
         user_id=alice_id,

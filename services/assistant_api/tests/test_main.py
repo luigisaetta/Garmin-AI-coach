@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-15
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -36,6 +36,7 @@ from services.assistant_api.identity.users import ApplicationUser, UserRepositor
 from services.assistant_api.nutrition.diary import NutritionDiaryService
 from services.assistant_api.nutrition.plan import NutritionPlanService
 from services.assistant_api.nutrition.rewrite import NutritionDiaryRewriteResult
+from services.assistant_api.tests.database import build_test_database
 
 
 class FakeOrchestrator:
@@ -142,12 +143,12 @@ def build_client() -> TestClient:
 def build_client_with_diary(tmp_path) -> TestClient:
     """Create a test client with a temporary nutrition diary database."""
     app = create_app()
-    database_path = tmp_path / "nutrition.db"
-    user = UserRepository(database_path).ensure_user(username="alice")
+    database = build_test_database(tmp_path, "nutrition.db")
+    user = UserRepository(database).ensure_user(username="alice")
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_nutrition_diary_service] = (
-        lambda: NutritionDiaryService(database_path)
+        lambda: NutritionDiaryService(database)
     )
     FakeDiaryRewriteService.calls.clear()
     app.dependency_overrides[get_nutrition_diary_rewrite_service] = (
@@ -159,13 +160,13 @@ def build_client_with_diary(tmp_path) -> TestClient:
 def build_client_with_plan(tmp_path) -> TestClient:
     """Create a test client with a temporary nutrition plan database."""
     app = create_app()
-    database_path = tmp_path / "nutrition.db"
-    user = UserRepository(database_path).ensure_user(username="alice")
+    database = build_test_database(tmp_path, "nutrition.db")
+    user = UserRepository(database).ensure_user(username="alice")
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_nutrition_plan_service] = lambda: (
         NutritionPlanService(
-            database_path,
+            database,
             text_extractor=lambda pdf_bytes: pdf_bytes.decode("utf-8"),
         )
     )
@@ -175,10 +176,10 @@ def build_client_with_plan(tmp_path) -> TestClient:
 def build_client_with_garmin_credentials(tmp_path) -> TestClient:
     """Create a test client with encrypted Garmin credential storage."""
     app = create_app()
-    database_path = tmp_path / "account.db"
-    user = UserRepository(database_path).ensure_user(username="alice")
+    database = build_test_database(tmp_path, "account.db")
+    user = UserRepository(database).ensure_user(username="alice")
     repository = GarminCredentialRepository(
-        database_path,
+        database,
         encryption_key=Fernet.generate_key(),
     )
     FakeTrainingProvider.calls.clear()
@@ -278,7 +279,7 @@ def test_chat_rejects_empty_message() -> None:
 def test_chat_rejects_missing_authenticated_user_header(tmp_path) -> None:
     """Verify protected backend routes require a resolved authenticated user."""
     app = create_app()
-    repository = UserRepository(tmp_path / "nutrition.db")
+    repository = UserRepository(build_test_database(tmp_path, "nutrition.db"))
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_user_repository] = lambda: repository
     client = TestClient(app)
@@ -291,7 +292,7 @@ def test_chat_rejects_missing_authenticated_user_header(tmp_path) -> None:
 def test_chat_rejects_unknown_authenticated_user(tmp_path) -> None:
     """Verify unknown proxy-authenticated usernames are not accepted."""
     app = create_app()
-    repository = UserRepository(tmp_path / "nutrition.db")
+    repository = UserRepository(build_test_database(tmp_path, "nutrition.db"))
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_user_repository] = lambda: repository
     client = TestClient(app)

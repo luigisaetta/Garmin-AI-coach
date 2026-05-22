@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -11,9 +11,10 @@ from __future__ import annotations
 import argparse
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from services.assistant_api.identity.users import ApplicationUser, UserRepository
+from services.assistant_api.identity.users import ApplicationUser
 
 
 @dataclass(frozen=True)
@@ -40,14 +41,14 @@ class UserIdMigration:
         display_name: str | None = None,
     ) -> MigrationResult:
         """Ensure the initial user and migrate existing nutrition rows."""
-        user = UserRepository(self._database_path).ensure_user(
-            username=initial_username,
-            display_name=display_name,
-        )
-
         with self._connect() as connection:
             connection.execute("BEGIN")
             try:
+                user = _ensure_user(
+                    connection,
+                    username=initial_username,
+                    display_name=display_name,
+                )
                 diary_rows = self._migrate_diary_entries(connection, user)
                 plan_rows = self._migrate_current_plan(connection, user)
                 self._create_indexes(connection)
@@ -266,6 +267,87 @@ def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
         (table_name,),
     ).fetchone()
     return row is not None
+
+
+def _ensure_user(
+    connection: sqlite3.Connection,
+    *,
+    username: str,
+    display_name: str | None,
+) -> ApplicationUser:
+    normalized_username = _normalize_username(username)
+    normalized_display_name = (display_name or normalized_username).strip()
+    if not normalized_display_name:
+        normalized_display_name = normalized_username
+
+    now = datetime.now(UTC).replace(microsecond=0).isoformat()
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """)
+    existing = connection.execute(
+        """
+        SELECT id, username, display_name, is_active, created_at, updated_at
+        FROM users
+        WHERE username = ?
+        """,
+        (normalized_username,),
+    ).fetchone()
+    if existing is None:
+        connection.execute(
+            """
+            INSERT INTO users (
+                username,
+                display_name,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (normalized_username, normalized_display_name, 1, now, now),
+        )
+    else:
+        connection.execute(
+            """
+            UPDATE users
+            SET display_name = ?, is_active = ?, updated_at = ?
+            WHERE username = ?
+            """,
+            (normalized_display_name, 1, now, normalized_username),
+        )
+
+    row = connection.execute(
+        """
+        SELECT id, username, display_name, is_active, created_at, updated_at
+        FROM users
+        WHERE username = ?
+        """,
+        (normalized_username,),
+    ).fetchone()
+    return ApplicationUser(
+        id=row["id"],
+        username=row["username"],
+        display_name=row["display_name"],
+        is_active=bool(row["is_active"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def _normalize_username(username: str) -> str:
+    normalized_username = username.strip().lower()
+    if not normalized_username:
+        raise ValueError("username is required")
+    if any(char.isspace() for char in normalized_username):
+        raise ValueError("username must not contain whitespace")
+    return normalized_username
 
 
 def _has_required_user_id(connection: sqlite3.Connection, table_name: str) -> bool:

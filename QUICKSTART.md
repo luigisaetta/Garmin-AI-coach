@@ -71,8 +71,13 @@ GARMIN_COMPACT_ACTIVITY_PAYLOAD=false
 GENAI_API_KEY=
 REGION=
 OCI_MODEL_ID=openai.gpt-5.4
-NUTRITION_DB_PATH=/data/garmin_ai_coach.db
-APP_DB_PATH=/data/garmin_ai_coach.db
+MYSQL_HOST=mysql
+MYSQL_PORT=3306
+MYSQL_DATABASE=garmin_ai_coach
+MYSQL_USER=garmin_coach
+MYSQL_PASSWORD=change-me
+MYSQL_ROOT_PASSWORD=change-root-me
+MYSQL_DATA_DIR=./data/mysql
 ASSISTANT_API_URL=http://localhost:8000
 NEXT_PUBLIC_ASSISTANT_API_URL=http://localhost:8000
 FRONTEND_PORT=3000
@@ -88,15 +93,20 @@ Configuration reference:
 | `GARMIN_USERNAME` | Only for legacy local scripts | Garmin Connect account username used by the legacy single-user local training data provider path. |
 | `GARMIN_PASSWORD` | Only for legacy local scripts | Garmin Connect account password used by the legacy single-user local training data provider path. |
 | `GARMIN_SESSION_STORAGE_PATH` | Only for legacy local scripts | Local path for Garmin session token reuse in the legacy single-user provider path. |
-| `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | Fernet key used by the assistant backend to encrypt per-user Garmin credentials in SQLite. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | Fernet key used by the assistant backend to encrypt per-user Garmin credentials in MySQL. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `GARMIN_SESSION_STORAGE_ROOT` | Recommended | Root directory for user-scoped Garmin session tokens. Docker Compose defaults this to `/data/garmin-sessions`. |
 | `REDACT_PII` | No | Redacts account, owner, profile, location, and coordinate-like fields before data can move toward assistant context. Keep this set to `true` unless explicitly debugging sanitized provider behaviour. |
 | `GARMIN_COMPACT_ACTIVITY_PAYLOAD` | No | Reduces Garmin activity payloads to coaching-relevant summary, zone, split, and training-effect fields before they are sent to assistant tooling. Defaults to `false` for backward-compatible local debugging. |
 | `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
 | `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
-| `NUTRITION_DB_PATH` | No | SQLite database path for user-scoped nutrition diary and plan persistence. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
-| `APP_DB_PATH` | No | SQLite database path for local application users and encrypted Garmin credential metadata. Docker Compose defaults this to `/data/garmin_ai_coach.db`. |
+| `MYSQL_HOST` | Yes | MySQL host. Docker Compose sets this to `mysql`. |
+| `MYSQL_PORT` | Yes | MySQL port. Docker Compose defaults this to `3306`. |
+| `MYSQL_DATABASE` | Yes | Application database name. Defaults to `garmin_ai_coach`. |
+| `MYSQL_USER` | Yes | Application database username. |
+| `MYSQL_PASSWORD` | Yes | Application database password. Keep this in `.env` or a secret file. |
+| `MYSQL_ROOT_PASSWORD` | Yes | MySQL root password for the local container. Keep this in `.env` or a secret file. |
+| `MYSQL_DATA_DIR` | Recommended | Host filesystem path mounted to `/var/lib/mysql`. Defaults to `./data/mysql`. |
 | `ASSISTANT_API_URL` | Yes for local frontend development | URL the Next.js server uses to call the assistant backend when running outside Docker, usually `http://localhost:8000`. Docker Compose overrides it internally to `http://assistant_api:8000`. |
 | `NEXT_PUBLIC_ASSISTANT_API_URL` | No | Optional fallback backend URL for non-Docker frontend experiments. Docker Compose sets it internally to `http://assistant_api:8000`. |
 | `FRONTEND_PORT` | No | Host port for the frontend container. Defaults to `3000`. |
@@ -122,6 +132,7 @@ The current Docker Compose runtime is:
 - `nginx`, the browser-facing reverse proxy with Basic Authentication
 - `frontend`, a Next.js web application
 - `assistant_api`, a Python assistant backend that uses the local `TrainingDataProvider`
+- `mysql`, a MySQL Community Edition database with host-backed storage
 
 Create a local `.env` file first:
 
@@ -138,7 +149,12 @@ docker compose build assistant_api
 ```
 
 The script updates `deployment/nginx/auth/.htpasswd` and ensures a matching
-row exists in the SQLite `users` table. It creates one user per run.
+row exists in the MySQL `users` table. It creates one user per run.
+
+MySQL data is stored on the host at `${MYSQL_DATA_DIR:-./data/mysql}` and is
+mounted into the MySQL container at `/var/lib/mysql`. Preserve that host
+directory to keep local users, Garmin credential metadata, diary entries, and
+nutrition plans across container rebuilds.
 
 The `.htpasswd` file is bind-mounted into the NGINX container and must be
 readable by the container's NGINX worker. If NGINX returns HTTP 500 and logs
@@ -176,6 +192,22 @@ http://assistant_api:8000
 ```
 
 The frontend should communicate only with the assistant backend. Assistant tools call the local Python Garmin training data provider inside backend code. A standalone Garmin data API container is not part of the current implementation.
+
+To migrate an existing SQLite database into MySQL, start the database service
+and run the migration command from the assistant container:
+
+```bash
+docker compose up -d mysql
+docker compose run --rm \
+  --volume /absolute/host/path/garmin_ai_coach.db:/migration/garmin_ai_coach.db:ro \
+  assistant_api \
+  python -m services.assistant_api.persistence.migrate_sqlite_to_mysql \
+    --sqlite-path /migration/garmin_ai_coach.db \
+    --initial-username alice
+```
+
+Omit `--initial-username` when the SQLite source already contains multi-user
+`users` and `user_id` columns.
 
 Basic Auth credentials are cached by browsers, so logout is limited in the
 current local deployment. To switch users reliably during testing, use a fresh

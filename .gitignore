@@ -39,6 +39,7 @@ pnpm-debug.log*
 
 # Docker and local runtime
 docker-compose.override.yml
+data/
 *.pid
 *.log
 

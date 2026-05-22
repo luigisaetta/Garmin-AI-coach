@@ -1,18 +1,20 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-05-22
 License: MIT
 """
 
 from __future__ import annotations
 
 import os
-import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import select
+
+from services.assistant_api.persistence import Database
+from services.assistant_api.persistence.schema import garmin_credentials
 
 
 class GarminCredentialError(RuntimeError):
@@ -44,14 +46,12 @@ class GarminCredentialRepository:
 
     def __init__(
         self,
-        database_path: str | Path,
+        database: Database,
         *,
         encryption_key: str | bytes,
     ) -> None:
-        self._database_path = Path(database_path)
-        self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._database = database
         self._fernet = Fernet(_normalize_key(encryption_key))
-        self._initialize_schema()
 
     def save_credentials(
         self,
@@ -72,38 +72,52 @@ class GarminCredentialRepository:
             "ascii"
         )
         now = _utc_now().isoformat()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO garmin_credentials (
-                    user_id,
-                    garmin_username,
-                    encrypted_password,
-                    created_at,
-                    updated_at
+        with self._database.engine.begin() as connection:
+            existing = (
+                connection.execute(
+                    select(garmin_credentials.c.id).where(
+                        garmin_credentials.c.user_id == user_id
+                    )
                 )
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    garmin_username = excluded.garmin_username,
-                    encrypted_password = excluded.encrypted_password,
-                    updated_at = excluded.updated_at
-                """,
-                (user_id, username, encrypted_password, now, now),
+                .mappings()
+                .fetchone()
             )
+            if existing is None:
+                connection.execute(
+                    garmin_credentials.insert().values(
+                        user_id=user_id,
+                        garmin_username=username,
+                        encrypted_password=encrypted_password,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            else:
+                connection.execute(
+                    garmin_credentials.update()
+                    .where(garmin_credentials.c.id == existing["id"])
+                    .values(
+                        garmin_username=username,
+                        encrypted_password=encrypted_password,
+                        updated_at=now,
+                    )
+                )
 
         return self.get_status(user_id=user_id)
 
     def get_status(self, *, user_id: int) -> GarminCredentialStatus:
         """Return safe metadata for the user's Garmin credential record."""
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT garmin_username, updated_at
-                FROM garmin_credentials
-                WHERE user_id = ?
-                """,
-                (user_id,),
-            ).fetchone()
+        with self._database.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(
+                        garmin_credentials.c.garmin_username,
+                        garmin_credentials.c.updated_at,
+                    ).where(garmin_credentials.c.user_id == user_id)
+                )
+                .mappings()
+                .fetchone()
+            )
 
         if row is None:
             return GarminCredentialStatus(configured=False)
@@ -116,20 +130,20 @@ class GarminCredentialRepository:
 
     def get_credentials(self, *, user_id: int) -> GarminCredentials | None:
         """Return decrypted credentials for backend-only Garmin access."""
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT
-                    user_id,
-                    garmin_username,
-                    encrypted_password,
-                    created_at,
-                    updated_at
-                FROM garmin_credentials
-                WHERE user_id = ?
-                """,
-                (user_id,),
-            ).fetchone()
+        with self._database.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(
+                        garmin_credentials.c.user_id,
+                        garmin_credentials.c.garmin_username,
+                        garmin_credentials.c.encrypted_password,
+                        garmin_credentials.c.created_at,
+                        garmin_credentials.c.updated_at,
+                    ).where(garmin_credentials.c.user_id == user_id)
+                )
+                .mappings()
+                .fetchone()
+            )
 
         if row is None:
             return None
@@ -153,44 +167,20 @@ class GarminCredentialRepository:
 
     def delete_credentials(self, *, user_id: int) -> None:
         """Remove the Garmin credential record for one user."""
-        with self._connect() as connection:
+        with self._database.engine.begin() as connection:
             connection.execute(
-                "DELETE FROM garmin_credentials WHERE user_id = ?",
-                (user_id,),
-            )
-
-    def _initialize_schema(self) -> None:
-        """Create Garmin credential storage tables and indexes."""
-        with self._connect() as connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS garmin_credentials (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL UNIQUE,
-                    garmin_username TEXT NOT NULL,
-                    encrypted_password TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
+                garmin_credentials.delete().where(
+                    garmin_credentials.c.user_id == user_id
                 )
-                """)
-            connection.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_garmin_credentials_user
-                ON garmin_credentials(user_id)
-                """)
-
-    def _connect(self) -> sqlite3.Connection:
-        """Open a SQLite connection configured for row-based reads."""
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+            )
 
 
 def load_garmin_credential_encryption_key() -> str:
     """Load the Garmin credential encryption key from env or secret file."""
     key_file = os.getenv("GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE")
     if key_file:
-        return Path(key_file).read_text(encoding="utf-8").strip()
+        with open(key_file, encoding="utf-8") as key_handle:
+            return key_handle.read().strip()
 
     key = os.getenv("GARMIN_CREDENTIAL_ENCRYPTION_KEY")
     if key:

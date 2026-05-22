@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-15
+Date Modified: 2026-05-22
 License: MIT
 """
 
@@ -64,6 +64,7 @@ from services.assistant_api.orchestration.training_data import (
     UserScopedTrainingDataClient,
 )
 from services.garmin_api.training_data_provider import TrainingDataProvider
+from services.assistant_api.persistence import Database, load_database_settings
 from services.shared.llm import get_inference_client
 
 LOGGER = logging.getLogger(__name__)
@@ -121,21 +122,30 @@ def get_training_data_provider() -> TrainingDataProvider:
 
 
 @lru_cache(maxsize=1)
+def get_database() -> Database:
+    """Create the assistant MySQL database connection once."""
+    load_dotenv()
+    settings = load_database_settings()
+    LOGGER.info(
+        "database init host=%s port=%s database=%s user=%s",
+        settings.host,
+        settings.port,
+        settings.database,
+        settings.username,
+    )
+    return Database.from_settings(settings)
+
+
+@lru_cache(maxsize=1)
 def get_nutrition_diary_service() -> NutritionDiaryService:
     """Create the local nutrition diary persistence service once."""
-    load_dotenv()
-    database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
-    LOGGER.info("nutrition diary service init database_path=%s", database_path)
-    return NutritionDiaryService(database_path)
+    return NutritionDiaryService(get_database())
 
 
 @lru_cache(maxsize=1)
 def get_nutrition_plan_service() -> NutritionPlanService:
     """Create the local nutrition plan persistence service once."""
-    load_dotenv()
-    database_path = os.getenv("NUTRITION_DB_PATH", "/data/garmin_ai_coach.db")
-    LOGGER.info("nutrition plan service init database_path=%s", database_path)
-    return NutritionPlanService(database_path)
+    return NutritionPlanService(get_database())
 
 
 def get_nutrition_diary_rewrite_service() -> NutritionDiaryRewriteService:
@@ -150,19 +160,15 @@ def get_nutrition_diary_rewrite_service() -> NutritionDiaryRewriteService:
 @lru_cache(maxsize=1)
 def get_user_repository() -> UserRepository:
     """Create the local user repository used by authenticated requests."""
-    load_dotenv()
-    database_path = os.getenv("APP_DB_PATH", "/data/garmin_ai_coach.db")
-    LOGGER.info("user repository init database_path=%s", database_path)
-    return UserRepository(database_path)
+    return UserRepository(get_database())
 
 
 @lru_cache(maxsize=1)
 def get_garmin_credential_repository() -> GarminCredentialRepository:
     """Create the encrypted Garmin credential repository."""
     load_dotenv()
-    database_path = os.getenv("APP_DB_PATH", "/data/garmin_ai_coach.db")
     return GarminCredentialRepository(
-        database_path,
+        get_database(),
         encryption_key=load_garmin_credential_encryption_key(),
     )
 

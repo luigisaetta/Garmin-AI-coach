@@ -1,4 +1,24 @@
 services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-garmin_ai_coach}
+      MYSQL_USER: ${MYSQL_USER:-garmin_coach}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-garmin_coach_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-garmin_coach_root_password}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - ${MYSQL_DATA_DIR:-./data/mysql}:/var/lib/mysql
+
   nginx:
     image: nginx:1.27-alpine
     depends_on:
@@ -27,12 +47,18 @@ services:
       GENAI_API_KEY: ${GENAI_API_KEY:-}
       REGION: ${REGION:-}
       OCI_MODEL_ID: ${OCI_MODEL_ID:-openai.gpt-5.4}
-      NUTRITION_DB_PATH: ${NUTRITION_DB_PATH:-/data/garmin_ai_coach.db}
-      APP_DB_PATH: ${APP_DB_PATH:-/data/garmin_ai_coach.db}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-garmin_ai_coach}
+      MYSQL_USER: ${MYSQL_USER:-garmin_coach}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-garmin_coach_password}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - garmin-session:/app/.garmin
-      - assistant-data:/data
+      - assistant-session-data:/data
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   frontend:
     build:
@@ -47,4 +73,4 @@ services:
 
 volumes:
   garmin-session:
-  assistant-data:
+  assistant-session-data:
