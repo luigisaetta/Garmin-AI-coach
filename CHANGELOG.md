@@ -16,6 +16,8 @@
   credential metadata, nutrition diary entries, and current nutrition plans.
 - Updated README, Quickstart, and multi-user migration notes for the MySQL
   deployment model.
+- Increased the NGINX request body limit so nutrition-plan PDF uploads can
+  reach the frontend and assistant backend.
 
 ### Verified
 
