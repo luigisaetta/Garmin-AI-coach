@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-22
+Date Modified: 2026-05-24
 License: MIT
 """
 
@@ -9,13 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from collections.abc import AsyncIterator, Callable
 from datetime import date
 from functools import lru_cache
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from services.assistant_api.api.schemas import (
@@ -223,6 +224,41 @@ def get_orchestrator() -> AssistantOrchestrator:
     )
 
 
+def add_request_logging(api: FastAPI) -> None:
+    """Attach HTTP request logging before endpoint dependencies run."""
+
+    @api.middleware("http")
+    async def log_http_request(request: Request, call_next):
+        """Log HTTP request ingress before endpoint dependencies run."""
+        started_at = time.monotonic()
+        LOGGER.info(
+            "http request start method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = (time.monotonic() - started_at) * 1000
+            LOGGER.exception(
+                "http request failed method=%s path=%s duration_ms=%.1f",
+                request.method,
+                request.url.path,
+                duration_ms,
+            )
+            raise
+
+        duration_ms = (time.monotonic() - started_at) * 1000
+        LOGGER.info(
+            "http request done method=%s path=%s status_code=%s duration_ms=%.1f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
+
 def create_app() -> FastAPI:
     """Create the FastAPI application for uvicorn."""
     configure_logging()
@@ -230,6 +266,7 @@ def create_app() -> FastAPI:
         title="Garmin AI Coach Assistant API",
         version="0.1.0",
     )
+    add_request_logging(api)
 
     @api.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

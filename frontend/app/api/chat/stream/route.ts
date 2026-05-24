@@ -1,7 +1,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-11
+ * Last modified: 2026-05-24
  * License: MIT
  */
 
@@ -15,39 +15,52 @@ const ASSISTANT_API_URL =
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const STREAM_HEADERS = {
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+  "Content-Type": "text/event-stream",
+  "X-Accel-Buffering": "no",
+};
+
+function streamError(message: string) {
+  return new Response(
+    `event: error\ndata: ${JSON.stringify({
+      type: "error",
+      conversation_id: "",
+      delta: message,
+    })}\n\n`,
+    {
+      status: 200,
+      headers: STREAM_HEADERS,
+    },
+  );
+}
+
 export async function POST(request: Request) {
   const body = await request.text();
-  const response = await fetch(`${ASSISTANT_API_URL}/chat/stream`, {
-    method: "POST",
-    headers: buildBackendHeaders(request, {
-      "Content-Type": "application/json",
-    }),
-    body,
-  });
+  let response: Response;
 
-  if (!response.ok || !response.body) {
-    return new Response(
-      JSON.stringify({
-        type: "error",
-        message: `Assistant API returned HTTP ${response.status}`,
+  try {
+    response = await fetch(`${ASSISTANT_API_URL}/chat/stream`, {
+      method: "POST",
+      cache: "no-store",
+      headers: buildBackendHeaders(request, {
+        "Content-Type": "application/json",
       }),
-      {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+      body,
+      signal: request.signal,
+    });
+  } catch (error) {
+    console.error("assistant_api chat stream fetch failed", error);
+    return streamError("Assistant API connection failed before streaming started.");
   }
 
-  const stream = new TransformStream();
-  response.body.pipeTo(stream.writable);
+  if (!response.ok || !response.body) {
+    return streamError(`Assistant API returned HTTP ${response.status}`);
+  }
 
-  return new Response(stream.readable, {
+  return new Response(response.body, {
     status: 200,
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream",
-      "X-Accel-Buffering": "no",
-    },
+    headers: STREAM_HEADERS,
   });
 }
