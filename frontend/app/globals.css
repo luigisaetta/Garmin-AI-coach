@@ -1039,6 +1039,252 @@ textarea:disabled {
   background: var(--coral);
 }
 
+.trendSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.trendSummaryCard,
+.trendChartPanel,
+.trendTablePanel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 42%),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="black"] .trendSummaryCard,
+:root[data-theme="black"] .trendChartPanel,
+:root[data-theme="black"] .trendTablePanel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 42%),
+    var(--surface);
+}
+
+.trendSummaryCard {
+  display: grid;
+  gap: 6px;
+  min-height: 118px;
+  align-content: center;
+  padding: 16px;
+  border-top: 3px solid var(--accent);
+}
+
+.trendSummaryCard:nth-child(2) {
+  border-top-color: var(--coral);
+}
+
+.trendSummaryCard:nth-child(3),
+.trendSummaryCard:nth-child(4) {
+  border-top-color: var(--gold);
+}
+
+.trendSummaryCard small,
+.trendSummaryCard span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trendSummaryCard strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.trendChartPanel,
+.trendTablePanel {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.trendChartHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trendChartHeader h3,
+.trendChartHeader p {
+  margin: 0;
+}
+
+.trendChartHeader h3 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.trendChartHeader p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.trendLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trendLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trendLegend span::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.trendLegend .cycling::before {
+  background: var(--coral);
+}
+
+.trendLegend .swimming::before {
+  background: var(--gold);
+}
+
+.trendBars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 10px;
+  align-items: end;
+  min-height: 280px;
+}
+
+.trendBarColumn {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  text-align: center;
+}
+
+.trendBarFrame {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 210px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, transparent 0 24%, var(--line) 25% 25.5%, transparent 26%),
+    linear-gradient(180deg, transparent 0 49%, var(--line) 50% 50.5%, transparent 51%),
+    linear-gradient(180deg, transparent 0 74%, var(--line) 75% 75.5%, transparent 76%),
+    var(--surface-2);
+}
+
+.trendStack {
+  display: flex;
+  width: min(72%, 34px);
+  min-height: 3px;
+  flex-direction: column-reverse;
+  overflow: hidden;
+  border-radius: 7px 7px 0 0;
+  background: var(--surface-3);
+}
+
+.trendStack span {
+  display: block;
+  min-height: 0;
+}
+
+.trendStack .running {
+  background: var(--accent);
+}
+
+.trendStack .cycling {
+  background: var(--coral);
+}
+
+.trendStack .swimming {
+  background: var(--gold);
+}
+
+.trendAverageMarker {
+  position: absolute;
+  right: 10%;
+  left: 10%;
+  z-index: 2;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text);
+  opacity: 0.5;
+}
+
+.trendBarColumn strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.trendBarColumn small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.trendTableWrap {
+  overflow-x: auto;
+}
+
+.trendTable {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+}
+
+.trendTable th,
+.trendTable td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.trendTable th {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.trendTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.sportCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.sportCell.cycling {
+  color: var(--coral);
+}
+
+.sportCell.swimming {
+  color: var(--gold);
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -1210,6 +1456,10 @@ textarea:disabled {
     grid-template-columns: 1fr;
   }
 
+  .trendSummaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .entryPreview {
     position: static;
   }
@@ -1240,6 +1490,20 @@ textarea:disabled {
 
   .sportNumbers {
     grid-template-columns: 1fr;
+  }
+
+  .trendSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .trendChartHeader {
+    flex-direction: column;
+  }
+
+  .trendBars {
+    grid-template-columns: repeat(4, minmax(54px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 6px;
   }
 
   .analysisHeader {

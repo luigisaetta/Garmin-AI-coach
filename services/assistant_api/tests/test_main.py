@@ -6,6 +6,8 @@ License: MIT
 
 from __future__ import annotations
 
+# pylint: disable=too-many-lines
+
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -26,6 +28,7 @@ from services.assistant_api.api.main import (
     get_training_data_provider_factory,
     get_training_metrics_analysis_service,
     get_training_metrics_service,
+    get_training_trends_service,
     get_user_repository,
 )
 from services.assistant_api.api.schemas import (
@@ -44,6 +47,11 @@ from services.assistant_api.tests.database import build_test_database
 from services.assistant_api.training_metrics import TrainingMetricsService
 from services.assistant_api.training_metrics_analysis import (
     TrainingMetricsAnalysisResult,
+)
+from services.assistant_api.training_trends import (
+    TrainingTrendsSummary,
+    WeeklySportTrend,
+    WeeklyTrainingTrend,
 )
 
 
@@ -197,6 +205,44 @@ class FakeMetricsTrainingClient:  # pylint: disable=too-few-public-methods
         ]
 
 
+class FakeTrendsTrainingClient:  # pylint: disable=too-few-public-methods
+    """Fake training client used by training trends endpoint tests."""
+
+    calls: list[dict[str, str | int | None]] = []
+
+    async def list_activities(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+        activity_type: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return weekly trend activities and record the user-scoped query."""
+        FakeTrendsTrainingClient.calls.append(
+            {
+                "user_id": user_id,
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "activity_type": activity_type,
+            }
+        )
+        return [
+            {
+                "activityType": {"typeKey": "running"},
+                "startTimeLocal": "2026-06-16T07:00:00",
+                "duration": 3600,
+                "activityTrainingLoad": 100,
+            },
+            {
+                "activityType": {"typeKey": "indoor_cycling"},
+                "startTimeLocal": "2026-06-24T07:00:00",
+                "duration": 1800,
+                "activityTrainingLoad": 50,
+            },
+        ]
+
+
 class FakeTrainingMetricsAnalysisService:  # pylint: disable=too-few-public-methods
     """Fake LLM training metrics analysis service used by endpoint tests."""
 
@@ -219,6 +265,74 @@ class FakeTrainingMetricsAnalysisService:  # pylint: disable=too-few-public-meth
         )
         return TrainingMetricsAnalysisResult(
             analysis="Periodo con carico concentrato sulla corsa."
+        )
+
+
+class FakeTrainingTrendsService:  # pylint: disable=too-few-public-methods
+    """Fake training trends service used by endpoint tests."""
+
+    calls: list[dict[str, object]] = []
+
+    async def summarize(
+        self,
+        *,
+        training_client,
+        user_id: int,
+        weeks: int,
+        end_date=None,
+    ) -> TrainingTrendsSummary:
+        """Record the request and return deterministic weekly trends."""
+        _ = (training_client, end_date)
+        if weeks < 4:
+            raise ValueError("weeks must be between 4 and 26.")
+        FakeTrainingTrendsService.calls.append(
+            {
+                "user_id": user_id,
+                "weeks": weeks,
+            }
+        )
+        return TrainingTrendsSummary(
+            begin_date=datetime.fromisoformat("2026-06-15T00:00:00").date(),
+            end_date=datetime.fromisoformat("2026-07-12T00:00:00").date(),
+            weeks_requested=4,
+            weeks=[
+                WeeklyTrainingTrend(
+                    week_start=datetime.fromisoformat("2026-06-15T00:00:00").date(),
+                    week_end=datetime.fromisoformat("2026-06-21T00:00:00").date(),
+                    iso_year=2026,
+                    iso_week=25,
+                    label="2026-W25",
+                    total_hours=1.0,
+                    total_training_load=100.0,
+                    activity_count=1,
+                    sports=[
+                        WeeklySportTrend(
+                            sport="running",
+                            label="Run",
+                            hours=1.0,
+                            training_load=100.0,
+                            activity_count=1,
+                        ),
+                        WeeklySportTrend(
+                            sport="cycling",
+                            label="Bike",
+                            hours=0.0,
+                            training_load=0.0,
+                            activity_count=0,
+                        ),
+                        WeeklySportTrend(
+                            sport="swimming",
+                            label="Swim",
+                            hours=0.0,
+                            training_load=0.0,
+                            activity_count=0,
+                        ),
+                    ],
+                    rolling_4_week_average_load=100.0,
+                    previous_week_delta_percent=None,
+                    acute_chronic_load_ratio=None,
+                )
+            ],
         )
 
 
@@ -312,6 +426,18 @@ def build_client_with_training_metrics() -> TestClient:
     app.dependency_overrides[get_training_metrics_analysis_service] = (
         FakeTrainingMetricsAnalysisService
     )
+    return TestClient(app)
+
+
+def build_client_with_training_trends() -> TestClient:
+    """Create a test client with fake training data for trends requests."""
+    app = create_app()
+    FakeTrendsTrainingClient.calls.clear()
+    FakeTrainingTrendsService.calls.clear()
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = lambda: _fake_user(user_id=7)
+    app.dependency_overrides[get_training_client] = FakeTrendsTrainingClient
+    app.dependency_overrides[get_training_trends_service] = FakeTrainingTrendsService
     return TestClient(app)
 
 
@@ -687,6 +813,69 @@ def test_training_metrics_analysis_rejects_reversed_date_range() -> None:
 
     assert response.status_code == 422
     assert "begin_date" in response.json()["detail"]
+
+
+def test_training_trends_returns_weekly_series() -> None:
+    """Verify clients can request weekly training trends."""
+    client = build_client_with_training_trends()
+
+    response = client.get("/training/trends?weeks=4")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "begin_date": "2026-06-15",
+        "end_date": "2026-07-12",
+        "weeks_requested": 4,
+        "weeks": [
+            {
+                "week_start": "2026-06-15",
+                "week_end": "2026-06-21",
+                "iso_year": 2026,
+                "iso_week": 25,
+                "label": "2026-W25",
+                "total_hours": 1.0,
+                "total_training_load": 100.0,
+                "activity_count": 1,
+                "sports": [
+                    {
+                        "sport": "running",
+                        "label": "Run",
+                        "hours": 1.0,
+                        "training_load": 100.0,
+                        "activity_count": 1,
+                    },
+                    {
+                        "sport": "cycling",
+                        "label": "Bike",
+                        "hours": 0.0,
+                        "training_load": 0.0,
+                        "activity_count": 0,
+                    },
+                    {
+                        "sport": "swimming",
+                        "label": "Swim",
+                        "hours": 0.0,
+                        "training_load": 0.0,
+                        "activity_count": 0,
+                    },
+                ],
+                "rolling_4_week_average_load": 100.0,
+                "previous_week_delta_percent": None,
+                "acute_chronic_load_ratio": None,
+            }
+        ],
+    }
+    assert FakeTrainingTrendsService.calls == [{"user_id": 7, "weeks": 4}]
+
+
+def test_training_trends_rejects_invalid_week_count() -> None:
+    """Verify the trends endpoint validates requested week count."""
+    client = build_client_with_training_trends()
+
+    response = client.get("/training/trends?weeks=3")
+
+    assert response.status_code == 422
+    assert "weeks" in response.json()["detail"]
 
 
 def test_put_nutrition_diary_entry_creates_day(tmp_path) -> None:

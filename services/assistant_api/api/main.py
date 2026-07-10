@@ -36,6 +36,9 @@ from services.assistant_api.api.schemas import (
     TrainingMetricsAnalysisResponse,
     TrainingMetricsResponse,
     TrainingSportMetricsResponse,
+    TrainingTrendSportResponse,
+    TrainingTrendWeekResponse,
+    TrainingTrendsResponse,
 )
 from services.assistant_api.identity.garmin_credentials import (
     GarminCredentialError,
@@ -84,6 +87,13 @@ from services.assistant_api.training_metrics_analysis import (
     TrainingMetricsAnalysisError,
     TrainingMetricsAnalysisService,
     TrainingMetricsAnalysisSettings,
+)
+from services.assistant_api.training_trends import (
+    DEFAULT_TREND_WEEKS,
+    TrainingTrendsService,
+    TrainingTrendsSummary,
+    WeeklySportTrend,
+    WeeklyTrainingTrend,
 )
 from services.shared.llm import get_inference_client
 
@@ -259,6 +269,11 @@ def get_training_metrics_analysis_service() -> TrainingMetricsAnalysisService:
         inference_client=get_inference_client(),
         settings=TrainingMetricsAnalysisSettings(model_id=settings.model_id),
     )
+
+
+def get_training_trends_service() -> TrainingTrendsService:
+    """Create the training trends service."""
+    return TrainingTrendsService()
 
 
 def add_request_logging(api: FastAPI) -> None:
@@ -508,6 +523,33 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-locals,too-many-stateme
             token_usage=result.token_usage,
         )
 
+    @api.get("/training/trends", response_model=TrainingTrendsResponse)
+    async def get_training_trends(
+        weeks: int = DEFAULT_TREND_WEEKS,
+        current_user: ApplicationUser = Depends(get_current_user),
+        training_client: TrainingActivitiesClient = Depends(get_training_client),
+        trends_service: TrainingTrendsService = Depends(get_training_trends_service),
+    ) -> TrainingTrendsResponse:
+        """Return weekly training-load trends for recent ISO weeks."""
+        LOGGER.info("training trends request weeks=%d", weeks)
+        try:
+            summary = await trends_service.summarize(
+                training_client=training_client,
+                user_id=current_user.id,
+                weeks=weeks,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except GARMIN_PROVIDER_ERRORS as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=safe_garmin_error_message(exc),
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return _training_trends_response(summary)
+
     @api.post(
         "/nutrition/diary-entries",
         response_model=NutritionDiaryEntryResponse,
@@ -732,6 +774,51 @@ def _sport_metrics_response(sport: SportMetrics) -> TrainingSportMetricsResponse
         vigorous_intensity_minutes=sport.vigorous_intensity_minutes,
         intensity_score=sport.intensity_score,
         intensity_source=sport.intensity_source,
+    )
+
+
+def _training_trends_response(
+    summary: TrainingTrendsSummary,
+) -> TrainingTrendsResponse:
+    """Convert training trends into the API response schema."""
+    return TrainingTrendsResponse(
+        begin_date=summary.begin_date,
+        end_date=summary.end_date,
+        weeks_requested=summary.weeks_requested,
+        weeks=[_training_trend_week_response(week) for week in summary.weeks],
+    )
+
+
+def _training_trend_week_response(
+    week: WeeklyTrainingTrend,
+) -> TrainingTrendWeekResponse:
+    """Convert one weekly trend object into the API response schema."""
+    return TrainingTrendWeekResponse(
+        week_start=week.week_start,
+        week_end=week.week_end,
+        iso_year=week.iso_year,
+        iso_week=week.iso_week,
+        label=week.label,
+        total_hours=week.total_hours,
+        total_training_load=week.total_training_load,
+        activity_count=week.activity_count,
+        sports=[_training_trend_sport_response(sport) for sport in week.sports],
+        rolling_4_week_average_load=week.rolling_4_week_average_load,
+        previous_week_delta_percent=week.previous_week_delta_percent,
+        acute_chronic_load_ratio=week.acute_chronic_load_ratio,
+    )
+
+
+def _training_trend_sport_response(
+    sport: WeeklySportTrend,
+) -> TrainingTrendSportResponse:
+    """Convert one sport trend object into the API response schema."""
+    return TrainingTrendSportResponse(
+        sport=sport.sport,
+        label=sport.label,
+        hours=sport.hours,
+        training_load=sport.training_load,
+        activity_count=sport.activity_count,
     )
 
 

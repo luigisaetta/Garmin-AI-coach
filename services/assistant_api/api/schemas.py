@@ -115,6 +115,42 @@ class TrainingMetricsAnalysisResponse(BaseModel):
     token_usage: TokenUsage | None = None
 
 
+class TrainingTrendSportResponse(BaseModel):
+    """Sport-specific trend values for one ISO week."""
+
+    sport: Literal["running", "cycling", "swimming"]
+    label: str
+    hours: float
+    training_load: float
+    activity_count: int
+
+
+class TrainingTrendWeekResponse(BaseModel):
+    """Aggregate training trend values for one ISO week."""
+
+    week_start: date
+    week_end: date
+    iso_year: int
+    iso_week: int
+    label: str
+    total_hours: float
+    total_training_load: float
+    activity_count: int
+    sports: list[TrainingTrendSportResponse]
+    rolling_4_week_average_load: float | None = None
+    previous_week_delta_percent: float | None = None
+    acute_chronic_load_ratio: float | None = None
+
+
+class TrainingTrendsResponse(BaseModel):
+    """Weekly training trends returned for recent ISO weeks."""
+
+    begin_date: date
+    end_date: date
+    weeks_requested: int
+    weeks: list[TrainingTrendWeekResponse]
+
+
 class GarminCredentialRequest(BaseModel):
     """Request payload for saving Garmin Connect credentials."""
 

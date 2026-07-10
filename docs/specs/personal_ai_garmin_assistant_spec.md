@@ -253,6 +253,39 @@ The training metrics analysis service must:
 * Treat missing training load, heart-rate, or training-effect values as
   uncertainty rather than inventing detail
 
+### 6.2.2 Training trends dashboard
+
+The application may expose a dedicated training trends dashboard in the Next.js
+frontend. This dashboard answers a different question than the interval metrics
+dashboard: it shows how the user's training load is evolving over time. The
+frontend should expose it as a separate sidebar link, for example
+`Training trends`, routed to `/training-trends`.
+
+The initial trend view should default to the most recent 12 ISO weeks and may
+allow the user to switch to 8 or 16 weeks. The assistant backend must expose a
+dedicated endpoint such as `GET /training/trends?weeks=12`. The frontend must
+call that endpoint through the existing Next.js API proxy pattern.
+
+The training trends backend service must:
+
+* Resolve the authenticated application user
+* Read activities through the user-scoped `TrainingDataProvider` boundary
+* Aggregate activities by ISO week for running, cycling, and swimming
+* Return compact weekly totals, never raw Garmin activity payloads
+* Calculate total training load per week, sport-specific training load, total
+  hours, sport-specific hours, activity count, week-over-week load delta, a
+  four-week rolling average, and an acute/chronic load ratio when enough prior
+  weeks are available
+* Treat missing `activityTrainingLoad` as zero for chart totals while keeping
+  volume hours available for context
+
+The initial UI should include:
+
+* Weekly stacked load bars by sport
+* Four-week average values for trend context
+* Current-week load, previous-week delta, and acute/chronic load ratio summary
+* A compact weekly table for exact values
+
 The Docker Compose service boundary remains unchanged for this feature:
 
 * The Next.js frontend container serves the dashboard and proxy routes

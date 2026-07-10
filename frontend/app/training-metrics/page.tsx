@@ -22,6 +22,7 @@ import {
   Settings2,
   Sparkles,
   Sun,
+  TrendingUp,
   Waves,
 } from "lucide-react";
 import Link from "next/link";
@@ -317,6 +318,10 @@ export default function TrainingMetricsPage() {
           >
             <BarChart3 size={16} />
             <span>Training metrics</span>
+          </Link>
+          <Link className="navItem" href="/training-trends">
+            <TrendingUp size={16} />
+            <span>Training trends</span>
           </Link>
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />

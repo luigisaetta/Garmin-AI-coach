@@ -9,6 +9,7 @@
 
 import {
   Activity,
+  BarChart3,
   BookOpenText,
   Bot,
   CheckCircle2,
@@ -367,8 +368,12 @@ export default function CoachChat() {
             <span>Coach chat</span>
           </Link>
           <Link className="navItem" href="/training-metrics">
-            <TrendingUp size={16} />
+            <BarChart3 size={16} />
             <span>Training metrics</span>
+          </Link>
+          <Link className="navItem" href="/training-trends">
+            <TrendingUp size={16} />
+            <span>Training trends</span>
           </Link>
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />
