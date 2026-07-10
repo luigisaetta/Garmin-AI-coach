@@ -22,10 +22,9 @@ export async function POST(request: Request) {
     const response = await fetch(`${ASSISTANT_API_URL}/training/metrics/analysis`, {
       method: "POST",
       cache: "no-store",
-      headers: {
-        ...buildBackendHeaders(request),
+      headers: buildBackendHeaders(request, {
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(await request.json()),
     });
 
