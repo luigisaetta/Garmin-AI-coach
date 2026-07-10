@@ -41,6 +41,10 @@ from services.assistant_api.identity.garmin_credentials import (
     GarminCredentialStatus,
     load_garmin_credential_encryption_key,
 )
+from services.assistant_api.garmin_errors import (
+    GARMIN_PROVIDER_ERRORS,
+    safe_garmin_error_message,
+)
 from services.assistant_api.nutrition.diary import (
     NutritionDiaryEntry,
     NutritionDiaryEntryInput,
@@ -368,6 +372,11 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-statements
                     os.path.join(session_path, str(current_user.id))
                 ),
             )
+        except GARMIN_PROVIDER_ERRORS as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=safe_garmin_error_message(exc),
+            ) from exc
         except (GarminCredentialError, RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -426,6 +435,11 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-statements
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except GARMIN_PROVIDER_ERRORS as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=safe_garmin_error_message(exc),
+            ) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 

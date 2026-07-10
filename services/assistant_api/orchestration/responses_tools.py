@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-20
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -12,6 +12,10 @@ from datetime import date
 from typing import Any
 
 from services.assistant_api.api.schemas import ChatMessage, DataSource
+from services.assistant_api.garmin_errors import (
+    GARMIN_PROVIDER_ERRORS,
+    safe_garmin_error_message,
+)
 from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
 
 LOGGER = logging.getLogger(__name__)
@@ -247,6 +251,8 @@ async def build_tool_outputs(
                 arguments,
                 user_id=user_id,
             )
+        except GARMIN_PROVIDER_ERRORS as exc:
+            output = json.dumps({"error": safe_garmin_error_message(exc)})
         except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             output = json.dumps({"error": str(exc)})
 

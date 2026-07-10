@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-14
+ * Last modified: 2026-07-10
  * License: MIT
  */
 
@@ -15,6 +15,10 @@ type CredentialStatus = {
   configured: boolean;
   garmin_username: string | null;
   updated_at: string | null;
+};
+
+type ErrorResponse = {
+  message?: string;
 };
 
 export default function AccountPage() {
@@ -87,11 +91,12 @@ export default function AccountPage() {
         method: "POST",
       });
       if (!response.ok) {
-        throw new Error(`Test API returned HTTP ${response.status}`);
+        const body = (await response.json().catch(() => null)) as ErrorResponse | null;
+        throw new Error(body?.message ?? `Test API returned HTTP ${response.status}`);
       }
       setMessage("Garmin login test passed");
-    } catch {
-      setMessage("Garmin login test failed");
+    } catch (caughtError) {
+      setMessage((caughtError as Error).message || "Garmin login test failed");
     } finally {
       setBusy(false);
     }

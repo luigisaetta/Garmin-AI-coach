@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from garminconnect.exceptions import GarminConnectConnectionError
 
 from services.assistant_api.api.main import (
     create_app,
@@ -112,6 +113,22 @@ class FakeTrainingProvider:  # pylint: disable=too-few-public-methods
                 "password": password,
                 "session_storage_path": session_storage_path,
             }
+        )
+
+
+class FailingGarminTrainingProvider:  # pylint: disable=too-few-public-methods
+    """Fake provider that simulates Garmin rate limiting credential tests."""
+
+    def __init__(
+        self,
+        *,
+        username: str | None,
+        password: str | None,
+        session_storage_path: str | None,
+    ) -> None:
+        _ = (username, password, session_storage_path)
+        raise GarminConnectConnectionError(
+            "Login failed: CAPTCHA_REQUIRED and Mobile login returned 429"
         )
 
 
@@ -228,6 +245,24 @@ def build_client_with_garmin_credentials(tmp_path) -> TestClient:
     app.dependency_overrides[get_garmin_credential_repository] = lambda: repository
     app.dependency_overrides[get_training_data_provider_factory] = (
         lambda: FakeTrainingProvider
+    )
+    return TestClient(app)
+
+
+def build_client_with_failing_garmin_credentials(tmp_path) -> TestClient:
+    """Create a test client whose Garmin provider fails with rate limiting."""
+    app = create_app()
+    database = build_test_database(tmp_path, "account.db")
+    user = UserRepository(database).ensure_user(username="alice")
+    repository = GarminCredentialRepository(
+        database,
+        encryption_key=Fernet.generate_key(),
+    )
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_garmin_credential_repository] = lambda: repository
+    app.dependency_overrides[get_training_data_provider_factory] = (
+        lambda: FailingGarminTrainingProvider
     )
     return TestClient(app)
 
@@ -435,6 +470,27 @@ def test_garmin_credential_test_uses_stored_secret_without_returning_it(
             "session_storage_path": "/data/garmin-sessions/1",
         }
     ]
+
+
+def test_garmin_credential_test_returns_safe_error_for_garmin_login_block(
+    tmp_path,
+) -> None:
+    """Verify Garmin login blocks return a user-safe 502 instead of HTTP 500."""
+    client = build_client_with_failing_garmin_credentials(tmp_path)
+    client.put(
+        "/account/garmin-credentials",
+        json={
+            "garmin_username": "alice@example.com",
+            "garmin_password": "super-secret",
+        },
+    )
+
+    response = client.post("/account/garmin-credentials/test")
+
+    assert response.status_code == 502
+    assert "Garmin Connect login failed" in response.json()["detail"]
+    assert "CAPTCHA" in response.json()["detail"]
+    assert "super-secret" not in response.text
 
 
 def test_chat_stream_returns_error_event_for_runtime_failure() -> None:

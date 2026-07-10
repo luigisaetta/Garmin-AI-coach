@@ -1,7 +1,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-14
+ * Last modified: 2026-07-10
  * License: MIT
  */
 
@@ -17,6 +17,20 @@ const ASSISTANT_API_URL =
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function responseMessage(body: unknown, fallback: string) {
+  if (body && typeof body === "object") {
+    const detail = "detail" in body ? body.detail : null;
+    const message = "message" in body ? body.message : null;
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+  return fallback;
+}
+
 export async function POST(request: Request) {
   try {
     const response = await fetch(
@@ -29,8 +43,14 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
+      const body = await response.json().catch(() => null);
       return NextResponse.json(
-        { message: `Assistant API returned HTTP ${response.status}` },
+        {
+          message: responseMessage(
+            body,
+            `Assistant API returned HTTP ${response.status}`,
+          ),
+        },
         { status: response.status === 404 ? 404 : 502 },
       );
     }

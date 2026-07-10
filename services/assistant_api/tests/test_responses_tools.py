@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from garminconnect.exceptions import GarminConnectConnectionError
 
 from services.assistant_api.api.schemas import ChatMessage
 from services.assistant_api.nutrition.analysis import NutritionAnalysisResult
@@ -132,6 +133,46 @@ class FailingTrainingClient:  # pylint: disable=too-few-public-methods
         """Raise a provider error."""
         _ = (user_id, begin_date, end_date)
         raise ValueError("Training data provider failed.")
+
+
+class GarminFailingTrainingClient:  # pylint: disable=too-few-public-methods
+    """Fake training client that simulates a Garmin login block."""
+
+    async def list_activities(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+        activity_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Raise a Garmin rate-limit provider error."""
+        _ = (user_id, begin_date, end_date, activity_type)
+        raise GarminConnectConnectionError(
+            "Login failed: CAPTCHA_REQUIRED and Mobile login returned 429"
+        )
+
+    async def get_heart_rates(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Raise a Garmin rate-limit provider error."""
+        _ = (user_id, begin_date, end_date)
+        raise GarminConnectConnectionError("Login failed: HTTP 403")
+
+    async def get_hrv_data(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+    ) -> dict[str, dict[str, Any] | None]:
+        """Raise a Garmin rate-limit provider error."""
+        _ = (user_id, begin_date, end_date)
+        raise GarminConnectConnectionError("Login failed: HTTP 403")
 
 
 class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
@@ -259,6 +300,28 @@ async def test_build_tool_outputs_uses_model_extracted_activity_range() -> None:
     assert outputs[0]["type"] == "function_call_output"
     assert outputs[0]["call_id"] == "call_123"
     assert "Morning Run" in outputs[0]["output"]
+
+
+@pytest.mark.anyio
+async def test_build_tool_outputs_returns_safe_garmin_error() -> None:
+    """Verify Garmin login failures become model-visible tool errors."""
+    function_call = SimpleNamespace(
+        type="function_call",
+        name="list_activities",
+        call_id="call_garmin_error",
+        arguments='{"begin_date": "2026-07-09", "end_date": "2026-07-09"}',
+    )
+
+    outputs = await responses_tools.build_tool_outputs(
+        function_calls=[function_call],
+        tool_runner=AssistantToolRunner(GarminFailingTrainingClient()),
+        user_id=1,
+    )
+
+    output = json.loads(outputs[0]["output"])
+    assert outputs[0]["call_id"] == "call_garmin_error"
+    assert "Garmin Connect login failed" in output["error"]
+    assert "CAPTCHA" in output["error"]
 
 
 @pytest.mark.anyio
