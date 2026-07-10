@@ -151,7 +151,7 @@ The project now has a first working vertical slice:
 - A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, nutrition diary endpoints, and nutrition-plan upload/read endpoints.
 - MySQL-backed, user-scoped nutrition diary and nutrition-plan persistence through dedicated backend services.
 - On-demand nutrition adherence analysis that uses the current user's nutrition plan, diary entries, and Garmin training context.
-- Responses API integration for OCI Enterprise AI using model `openai.gpt-5.4`.
+- Responses API integration for OCI Enterprise AI using model `openai.gpt-5.5`.
 - Model tool calling with `list_activities`, `get_heart_rates`, and `analyze_nutrition_adherence_period`, backed by local Python service boundaries.
 - A Garmin Connect provider foundation with PII redaction and mocked tests.
 - Local multi-user support with NGINX Basic Auth, a backend `users` table, per-user encrypted Garmin credentials, and per-user Garmin session storage.
@@ -244,7 +244,7 @@ files.
 | `GARMIN_COMPACT_ACTIVITY_PAYLOAD` | No | `assistant_api`, Garmin provider | Keeps only coaching-relevant activity summary, zone, split, and training-effect fields before tool output is sent toward the model. Defaults to `false`. |
 | `GENAI_API_KEY` | Yes for model calls | `assistant_api`, examples | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | `assistant_api`, examples | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
-| `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `OCI_MODEL_ID` | No | `assistant_api`, examples | OCI hosted model identifier. Defaults to `openai.gpt-5.5`. |
 | `MYSQL_HOST` | Yes | `assistant_api` | MySQL host. Docker Compose sets this to `mysql`. |
 | `MYSQL_PORT` | Yes | `assistant_api` | MySQL port. Docker Compose defaults this to `3306`. |
 | `MYSQL_DATABASE` | Yes | `mysql`, `assistant_api` | Application database name. Defaults to `garmin_ai_coach`. |

@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-20
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -260,7 +260,7 @@ async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
     training_client = FakeTrainingClient()
     orchestrator = AssistantOrchestrator(
         settings=AssistantSettings(
-            model_id="openai.gpt-5.4",
+            model_id="openai.gpt-5.5",
         ),
         inference_client=inference_client,
         training_client=training_client,
@@ -305,7 +305,7 @@ async def test_complete_chat_reports_heart_rate_data_source() -> None:
     inference_client = FakeInferenceClient(tool_name="get_heart_rates")
     training_client = FakeTrainingClient()
     orchestrator = AssistantOrchestrator(
-        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        settings=AssistantSettings(model_id="openai.gpt-5.5"),
         inference_client=inference_client,
         training_client=training_client,
     )
@@ -332,7 +332,7 @@ async def test_complete_chat_reports_hrv_data_source() -> None:
     inference_client = FakeInferenceClient(tool_name="get_hrv_data")
     training_client = FakeTrainingClient()
     orchestrator = AssistantOrchestrator(
-        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        settings=AssistantSettings(model_id="openai.gpt-5.5"),
         inference_client=inference_client,
         training_client=training_client,
     )
@@ -362,7 +362,7 @@ async def test_complete_chat_runs_nutrition_analysis_tool() -> None:
     training_client = FakeTrainingClient()
     nutrition_agent = FakeNutritionAnalysisAgent()
     orchestrator = AssistantOrchestrator(
-        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        settings=AssistantSettings(model_id="openai.gpt-5.5"),
         inference_client=inference_client,
         training_client=training_client,
         nutrition_analysis_agent=nutrition_agent,
@@ -426,7 +426,7 @@ async def test_stream_chat_uses_responses_api_stream_for_final_answer() -> None:
     inference_client = FakeInferenceClient()
     training_client = FakeTrainingClient()
     orchestrator = AssistantOrchestrator(
-        settings=AssistantSettings(model_id="openai.gpt-5.4"),
+        settings=AssistantSettings(model_id="openai.gpt-5.5"),
         inference_client=inference_client,
         training_client=training_client,
     )

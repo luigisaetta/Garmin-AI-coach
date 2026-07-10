@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-22
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-id",
         default=None,
-        help="OCI hosted model id. Defaults to OCI_MODEL_ID or openai.gpt-5.4.",
+        help="OCI hosted model id. Defaults to OCI_MODEL_ID or openai.gpt-5.5.",
     )
     return parser.parse_args()
 
@@ -48,7 +48,7 @@ async def run_analysis(args: argparse.Namespace) -> None:
     """Create the nutrition subagent and print the generated report."""
     load_dotenv()
     database = Database.from_settings(load_database_settings())
-    model_id = args.model_id or os.getenv("OCI_MODEL_ID", "openai.gpt-5.4")
+    model_id = args.model_id or os.getenv("OCI_MODEL_ID", "openai.gpt-5.5")
 
     subagent = NutritionAnalysisSubAgent.create(
         plan_service=NutritionPlanService(database),

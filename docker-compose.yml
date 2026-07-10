@@ -46,7 +46,7 @@ services:
       GARMIN_COMPACT_ACTIVITY_PAYLOAD: ${GARMIN_COMPACT_ACTIVITY_PAYLOAD:-false}
       GENAI_API_KEY: ${GENAI_API_KEY:-}
       REGION: ${REGION:-}
-      OCI_MODEL_ID: ${OCI_MODEL_ID:-openai.gpt-5.4}
+      OCI_MODEL_ID: ${OCI_MODEL_ID:-openai.gpt-5.5}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-garmin_ai_coach}

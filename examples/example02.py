@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -90,7 +90,7 @@ def build_user_message(request: str) -> str:
 def get_model_id() -> str:
     """Return the configured model identifier for Responses API calls."""
     load_dotenv()
-    return os.getenv("OCI_MODEL_ID", "openai.gpt-5.4")
+    return os.getenv("OCI_MODEL_ID", "openai.gpt-5.5")
 
 
 def create_final_response(

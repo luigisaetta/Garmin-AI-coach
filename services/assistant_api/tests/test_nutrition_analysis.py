@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-22
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -182,7 +182,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
         diary_service=diary_service,
         training_client=training_client,
         inference_client=inference_client,
-        settings=NutritionAnalysisSettings(model_id="openai.gpt-5.4"),
+        settings=NutritionAnalysisSettings(model_id="openai.gpt-5.5"),
     )
 
     result = await subagent.analyze(
@@ -209,7 +209,7 @@ async def _run_subagent_graph_assertions(tmp_path) -> None:
     ]
     assert len(inference_client.responses.requests) == 1
     request = inference_client.responses.requests[0]
-    assert request["model"] == "openai.gpt-5.4"
+    assert request["model"] == "openai.gpt-5.5"
     assert request["instructions"] == NUTRITION_ANALYSIS_PROMPT
     payload = json.loads(request["input"][0]["content"])
     assert payload["period"] == {

@@ -70,7 +70,7 @@ REDACT_PII=true
 GARMIN_COMPACT_ACTIVITY_PAYLOAD=false
 GENAI_API_KEY=
 REGION=
-OCI_MODEL_ID=openai.gpt-5.4
+OCI_MODEL_ID=openai.gpt-5.5
 MYSQL_HOST=mysql
 MYSQL_PORT=3306
 MYSQL_DATABASE=garmin_ai_coach
@@ -99,7 +99,7 @@ Configuration reference:
 | `GARMIN_COMPACT_ACTIVITY_PAYLOAD` | No | Reduces Garmin activity payloads to coaching-relevant summary, zone, split, and training-effect fields before they are sent to assistant tooling. Defaults to `false` for backward-compatible local debugging. |
 | `GENAI_API_KEY` | Yes for model calls | OCI Enterprise AI OpenAI-compatible API key. |
 | `REGION` | Yes for model calls | OCI region used to build the OpenAI-compatible inference endpoint, for example `eu-frankfurt-1`. |
-| `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.4`. |
+| `OCI_MODEL_ID` | No | OCI hosted model identifier. Defaults to `openai.gpt-5.5`. |
 | `MYSQL_HOST` | Yes | MySQL host. Docker Compose sets this to `mysql`. |
 | `MYSQL_PORT` | Yes | MySQL port. Docker Compose defaults this to `3306`. |
 | `MYSQL_DATABASE` | Yes | Application database name. Defaults to `garmin_ai_coach`. |

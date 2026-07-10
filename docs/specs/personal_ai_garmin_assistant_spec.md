@@ -103,7 +103,7 @@ Assistant backend
   |
   | Responses API
   v
-OCI Enterprise AI, model openai.gpt-5.4
+OCI Enterprise AI, model openai.gpt-5.5
 ```
 
 The nutrition extension keeps the same high-level service boundary:
@@ -128,7 +128,7 @@ Assistant backend
   |
   | Responses API
   v
-OCI Enterprise AI, model openai.gpt-5.4
+OCI Enterprise AI, model openai.gpt-5.5
 ```
 
 The nutrition extension must not introduce an MCP server. Local durable
@@ -181,7 +181,7 @@ The assistant backend is responsible for:
 * Exposing model tools that call the local Python training data provider
 * Exposing nutrition-plan and diary workflows when the nutrition extension is implemented
 * Constructing model requests using the Responses API
-* Calling OCI Enterprise AI with model `openai.gpt-5.4`
+* Calling OCI Enterprise AI with model `openai.gpt-5.5`
 * Returning grounded answers to the frontend
 * Returning nutrition adherence reports with clear limits and source descriptions
 * Returning Responses API token usage summaries when available
@@ -780,7 +780,7 @@ The assistant backend must use OCI Enterprise AI.
 The target model is:
 
 ```text
-openai.gpt-5.4
+openai.gpt-5.5
 ```
 
 Python integration must use the Responses API.
@@ -837,7 +837,7 @@ Likely configuration values:
 * OCI region, `REGION`
 * Generative AI API key, `GENAI_API_KEY`
 * OpenAI-compatible generative AI base URL derived from `REGION` as `https://inference.generativeai.{REGION}.oci.oraclecloud.com/openai/v1`
-* OCI model identifier, default `openai.gpt-5.4`
+* OCI model identifier, default `openai.gpt-5.5`
 * Assistant API URL for the frontend
 * Log level
 * MySQL host, port, database name, username, and password or mounted secret

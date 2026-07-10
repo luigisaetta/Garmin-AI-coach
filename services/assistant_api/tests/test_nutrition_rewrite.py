@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-15
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -60,7 +60,7 @@ def test_diary_rewrite_uses_responses_api_with_guardrail_prompt() -> None:
     inference_client = FakeInferenceClient("Colazione: yogurt e miele.")
     service = NutritionDiaryRewriteService(
         inference_client=inference_client,
-        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.4"),
+        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.5"),
     )
 
     result = asyncio.run(
@@ -78,7 +78,7 @@ def test_diary_rewrite_uses_responses_api_with_guardrail_prompt() -> None:
     assert result.token_usage is not None
     assert result.token_usage.total_tokens == 18
     request = inference_client.responses.requests[0]
-    assert request["model"] == "openai.gpt-5.4"
+    assert request["model"] == "openai.gpt-5.5"
     assert request["instructions"] == NUTRITION_DIARY_REWRITE_PROMPT
     payload = json.loads(request["input"][0]["content"])
     assert payload == {
@@ -94,7 +94,7 @@ def test_diary_rewrite_returns_empty_without_model_call_for_blank_input() -> Non
     inference_client = FakeInferenceClient("unused")
     service = NutritionDiaryRewriteService(
         inference_client=inference_client,
-        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.4"),
+        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.5"),
     )
 
     result = asyncio.run(
@@ -115,7 +115,7 @@ def test_diary_rewrite_raises_when_model_returns_empty_text() -> None:
     """Verify empty Responses output fails clearly."""
     service = NutritionDiaryRewriteService(
         inference_client=FakeInferenceClient("   "),
-        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.4"),
+        settings=NutritionDiaryRewriteSettings(model_id="openai.gpt-5.5"),
     )
 
     with pytest.raises(NutritionDiaryRewriteError):

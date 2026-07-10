@@ -96,7 +96,7 @@ def load_settings() -> AssistantSettings:
     """Load assistant API settings from environment variables."""
     load_dotenv()
     return AssistantSettings(
-        model_id=os.getenv("OCI_MODEL_ID", "openai.gpt-5.4"),
+        model_id=os.getenv("OCI_MODEL_ID", "openai.gpt-5.5"),
     )
 
 

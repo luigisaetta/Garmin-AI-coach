@@ -127,7 +127,7 @@ Use OCI Enterprise AI and OCI hosted models.
 
 The initial target model is:
 
-`openai.gpt-5.4`
+`openai.gpt-5.5`
 
 Python code that interacts with the model must use the Responses API.
 
