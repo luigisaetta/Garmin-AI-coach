@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Theme = "light" | "black";
 type MetricsState = "idle" | "loading" | "ready" | "error";
@@ -568,10 +570,19 @@ export default function TrainingMetricsPage() {
           </div>
 
           {analysisState === "ready" && analysis ? (
-            <div className="analysisText">
-              {analysis.analysis.split("\n").map((line, index) => (
-                <p key={`${index}-${line}`}>{line}</p>
-              ))}
+            <div className="analysisText markdown">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ children, ...props }) => (
+                    <a {...props} rel="noreferrer" target="_blank">
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {analysis.analysis}
+              </ReactMarkdown>
             </div>
           ) : (
             <div
