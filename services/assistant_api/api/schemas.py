@@ -80,6 +80,10 @@ class TrainingSportMetricsResponse(BaseModel):
     hours: float
     total_duration_seconds: float
     total_training_load: float | None = None
+    training_load_per_hour: float | None = None
+    weighted_average_heart_rate: float | None = None
+    average_aerobic_training_effect: float | None = None
+    average_anaerobic_training_effect: float | None = None
     moderate_intensity_minutes: float
     vigorous_intensity_minutes: float
     intensity_score: float | None = None

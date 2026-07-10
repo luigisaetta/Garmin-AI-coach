@@ -39,6 +39,10 @@ type SportMetrics = {
   hours: number;
   total_duration_seconds: number;
   total_training_load: number | null;
+  training_load_per_hour: number | null;
+  weighted_average_heart_rate: number | null;
+  average_aerobic_training_effect: number | null;
+  average_anaerobic_training_effect: number | null;
   moderate_intensity_minutes: number;
   vigorous_intensity_minutes: number;
   intensity_score: number | null;
@@ -112,14 +116,11 @@ function formatNumber(value: number | null) {
   }).format(value);
 }
 
-function intensityLabel(source: IntensitySource) {
-  if (source === "training_load") {
-    return "Training load";
+function formatHeartRate(value: number | null) {
+  if (value === null) {
+    return "-";
   }
-  if (source === "intensity_minutes") {
-    return "Intensity minutes";
-  }
-  return "No intensity data";
+  return `${formatNumber(value)} bpm`;
 }
 
 export default function TrainingMetricsPage() {
@@ -414,12 +415,28 @@ export default function TrainingMetricsPage() {
                     <strong>{formatHours(sport.hours)}</strong>
                   </div>
                   <div>
-                    <small>Intensity</small>
-                    <strong>{formatNumber(sport.intensity_score)}</strong>
+                    <small>Training load</small>
+                    <strong>{formatNumber(sport.total_training_load)}</strong>
                   </div>
                   <div>
-                    <small>Source</small>
-                    <strong>{intensityLabel(sport.intensity_source)}</strong>
+                    <small>Load / hour</small>
+                    <strong>{formatNumber(sport.training_load_per_hour)}</strong>
+                  </div>
+                  <div>
+                    <small>Weighted HR</small>
+                    <strong>{formatHeartRate(sport.weighted_average_heart_rate)}</strong>
+                  </div>
+                  <div>
+                    <small>Aerobic TE</small>
+                    <strong>
+                      {formatNumber(sport.average_aerobic_training_effect)}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>Anaerobic TE</small>
+                    <strong>
+                      {formatNumber(sport.average_anaerobic_training_effect)}
+                    </strong>
                   </div>
                 </div>
 
@@ -449,6 +466,10 @@ export default function TrainingMetricsPage() {
                   <div>
                     <dt>Training load</dt>
                     <dd>{formatNumber(sport.total_training_load)}</dd>
+                  </div>
+                  <div>
+                    <dt>Load per hour</dt>
+                    <dd>{formatNumber(sport.training_load_per_hour)}</dd>
                   </div>
                 </dl>
               </article>

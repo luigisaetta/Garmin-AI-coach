@@ -53,6 +53,9 @@ def test_summarize_training_metrics_groups_sports_and_training_load() -> None:
                 "activityType": {"typeKey": "running"},
                 "duration": 3600,
                 "activityTrainingLoad": 130.25,
+                "averageHR": 150,
+                "aerobicTrainingEffect": 3.2,
+                "anaerobicTrainingEffect": 0.8,
                 "moderateIntensityMinutes": 15,
                 "vigorousIntensityMinutes": 35,
             },
@@ -60,6 +63,9 @@ def test_summarize_training_metrics_groups_sports_and_training_load() -> None:
                 "activityType": {"typeKey": "trail_running"},
                 "duration": 1800,
                 "activityTrainingLoad": "70.25",
+                "averageHR": 140,
+                "aerobicTrainingEffect": 2.0,
+                "anaerobicTrainingEffect": 0.2,
             },
             {
                 "activityType": {"typeKey": "road_biking"},
@@ -81,6 +87,10 @@ def test_summarize_training_metrics_groups_sports_and_training_load() -> None:
     assert running.activity_count == 2
     assert running.hours == 1.5
     assert running.total_training_load == 200.5
+    assert running.training_load_per_hour == 133.7
+    assert running.weighted_average_heart_rate == 146.7
+    assert running.average_aerobic_training_effect == 2.8
+    assert running.average_anaerobic_training_effect == 0.6
     assert running.intensity_score == 200.5
     assert running.intensity_source == "training_load"
 
@@ -88,6 +98,8 @@ def test_summarize_training_metrics_groups_sports_and_training_load() -> None:
     assert cycling.activity_count == 1
     assert cycling.hours == 2.0
     assert cycling.total_training_load is None
+    assert cycling.training_load_per_hour is None
+    assert cycling.weighted_average_heart_rate is None
     assert cycling.intensity_score == 140
     assert cycling.intensity_source == "intensity_minutes"
 

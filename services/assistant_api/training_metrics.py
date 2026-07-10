@@ -66,6 +66,10 @@ class SportMetrics:  # pylint: disable=too-many-instance-attributes
     hours: float
     total_duration_seconds: float
     total_training_load: float | None
+    training_load_per_hour: float | None
+    weighted_average_heart_rate: float | None
+    average_aerobic_training_effect: float | None
+    average_anaerobic_training_effect: float | None
     moderate_intensity_minutes: float
     vigorous_intensity_minutes: float
     intensity_score: float | None
@@ -121,6 +125,12 @@ def summarize_training_metrics(
             "duration_seconds": 0.0,
             "training_load": 0.0,
             "training_load_count": 0.0,
+            "heart_rate_duration_seconds": 0.0,
+            "heart_rate_weighted_sum": 0.0,
+            "aerobic_effect_duration_seconds": 0.0,
+            "aerobic_effect_weighted_sum": 0.0,
+            "anaerobic_effect_duration_seconds": 0.0,
+            "anaerobic_effect_weighted_sum": 0.0,
             "moderate_minutes": 0.0,
             "vigorous_minutes": 0.0,
         }
@@ -134,12 +144,34 @@ def summarize_training_metrics(
 
         sport_totals = totals[sport]
         sport_totals["activity_count"] += 1
-        sport_totals["duration_seconds"] += _number(activity.get("duration"))
+        duration_seconds = _number(activity.get("duration"))
+        sport_totals["duration_seconds"] += duration_seconds
 
         training_load = _optional_number(activity.get("activityTrainingLoad"))
         if training_load is not None:
             sport_totals["training_load"] += training_load
             sport_totals["training_load_count"] += 1
+
+        average_heart_rate = _optional_number(activity.get("averageHR"))
+        if average_heart_rate is not None and duration_seconds > 0:
+            sport_totals["heart_rate_weighted_sum"] += (
+                average_heart_rate * duration_seconds
+            )
+            sport_totals["heart_rate_duration_seconds"] += duration_seconds
+
+        aerobic_effect = _optional_number(activity.get("aerobicTrainingEffect"))
+        if aerobic_effect is not None and duration_seconds > 0:
+            sport_totals["aerobic_effect_weighted_sum"] += (
+                aerobic_effect * duration_seconds
+            )
+            sport_totals["aerobic_effect_duration_seconds"] += duration_seconds
+
+        anaerobic_effect = _optional_number(activity.get("anaerobicTrainingEffect"))
+        if anaerobic_effect is not None and duration_seconds > 0:
+            sport_totals["anaerobic_effect_weighted_sum"] += (
+                anaerobic_effect * duration_seconds
+            )
+            sport_totals["anaerobic_effect_duration_seconds"] += duration_seconds
 
         sport_totals["moderate_minutes"] += _number(
             activity.get("moderateIntensityMinutes")
@@ -178,13 +210,31 @@ def _build_sport_metrics(sport: Sport, values: dict[str, float]) -> SportMetrics
         intensity_source = "none"
 
     duration_seconds = values["duration_seconds"]
+    hours = duration_seconds / 3600
     return SportMetrics(
         sport=sport,
         label=SPORT_LABELS[sport],
         activity_count=int(values["activity_count"]),
-        hours=round(duration_seconds / 3600, 2),
+        hours=round(hours, 2),
         total_duration_seconds=round(duration_seconds, 1),
         total_training_load=total_training_load,
+        training_load_per_hour=(
+            round(total_training_load / hours, 1)
+            if total_training_load is not None and hours > 0
+            else None
+        ),
+        weighted_average_heart_rate=_weighted_average(
+            weighted_sum=values["heart_rate_weighted_sum"],
+            weight=values["heart_rate_duration_seconds"],
+        ),
+        average_aerobic_training_effect=_weighted_average(
+            weighted_sum=values["aerobic_effect_weighted_sum"],
+            weight=values["aerobic_effect_duration_seconds"],
+        ),
+        average_anaerobic_training_effect=_weighted_average(
+            weighted_sum=values["anaerobic_effect_weighted_sum"],
+            weight=values["anaerobic_effect_duration_seconds"],
+        ),
         moderate_intensity_minutes=moderate_minutes,
         vigorous_intensity_minutes=vigorous_minutes,
         intensity_score=intensity_score,
@@ -215,6 +265,13 @@ def _sport_from_activity(activity: dict[str, Any]) -> Sport | None:
         if normalized_candidates.intersection(aliases):
             return sport
     return None
+
+
+def _weighted_average(*, weighted_sum: float, weight: float) -> float | None:
+    """Return a rounded weighted average when the weight is available."""
+    if weight <= 0:
+        return None
+    return round(weighted_sum / weight, 1)
 
 
 def _normalize_activity_type(value: str) -> str:

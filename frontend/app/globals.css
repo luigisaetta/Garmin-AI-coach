@@ -901,10 +901,6 @@ textarea:disabled {
   white-space: nowrap;
 }
 
-.sportNumbers div:nth-child(3) strong {
-  font-size: 13px;
-}
-
 .barGroup {
   display: grid;
   gap: 7px;

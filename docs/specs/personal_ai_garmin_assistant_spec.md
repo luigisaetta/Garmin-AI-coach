@@ -213,7 +213,8 @@ The assistant backend is responsible for:
 * Resolving the authenticated application user
 * Reading activities through the user-scoped `TrainingDataProvider` boundary
 * Normalising Garmin activity type variants into running, cycling, and swimming
-* Aggregating hours, activity count, and intensity values per sport
+* Aggregating hours, activity count, training load, heart-rate, and training
+  effect values per sport
 * Returning only compact aggregate metrics to the frontend
 
 The initial intensity metric should prefer Garmin `activityTrainingLoad` when
@@ -222,6 +223,17 @@ an intensity-minute score derived from `moderateIntensityMinutes` and
 `vigorousIntensityMinutes`, with vigorous minutes weighted more heavily than
 moderate minutes. API responses must identify which intensity source was used
 for each sport so the UI does not imply false precision.
+
+The dashboard may also expose derived summary values when present in Garmin
+activity payloads:
+
+* Training load per hour, derived from total `activityTrainingLoad` divided by
+  total sport hours
+* Duration-weighted average heart rate, derived from `averageHR` and `duration`
+* Duration-weighted average aerobic training effect, derived from
+  `aerobicTrainingEffect` and `duration`
+* Duration-weighted average anaerobic training effect, derived from
+  `anaerobicTrainingEffect` and `duration`
 
 The Docker Compose service boundary remains unchanged for this feature:
 
