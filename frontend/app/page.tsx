@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-05-22
+ * Last modified: 2026-07-10
  * License: MIT
  */
 
@@ -365,6 +365,10 @@ export default function CoachChat() {
           <Link className="navItem active" href="/" aria-current="page">
             <MessageSquareText size={16} />
             <span>Coach chat</span>
+          </Link>
+          <Link className="navItem" href="/training-metrics">
+            <TrendingUp size={16} />
+            <span>Training metrics</span>
           </Link>
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />

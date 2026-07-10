@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-22
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -21,7 +21,9 @@ from services.assistant_api.api.main import (
     get_nutrition_diary_service,
     get_nutrition_plan_service,
     get_orchestrator,
+    get_training_client,
     get_training_data_provider_factory,
+    get_training_metrics_service,
     get_user_repository,
 )
 from services.assistant_api.api.schemas import (
@@ -37,6 +39,7 @@ from services.assistant_api.nutrition.diary import NutritionDiaryService
 from services.assistant_api.nutrition.plan import NutritionPlanService
 from services.assistant_api.nutrition.rewrite import NutritionDiaryRewriteResult
 from services.assistant_api.tests.database import build_test_database
+from services.assistant_api.training_metrics import TrainingMetricsService
 
 
 class FakeOrchestrator:
@@ -132,6 +135,43 @@ class FakeDiaryRewriteService:  # pylint: disable=too-few-public-methods
         )
 
 
+class FakeMetricsTrainingClient:  # pylint: disable=too-few-public-methods
+    """Fake training client used by metrics endpoint tests."""
+
+    calls: list[dict[str, str | int | None]] = []
+
+    async def list_activities(
+        self,
+        *,
+        user_id: int,
+        begin_date: str,
+        end_date: str,
+        activity_type: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return dashboard activities and record the user-scoped query."""
+        FakeMetricsTrainingClient.calls.append(
+            {
+                "user_id": user_id,
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "activity_type": activity_type,
+            }
+        )
+        return [
+            {
+                "activityType": {"typeKey": "running"},
+                "duration": 3600,
+                "activityTrainingLoad": 120,
+            },
+            {
+                "activityType": {"typeKey": "indoor_cycling"},
+                "duration": 1800,
+                "moderateIntensityMinutes": 10,
+                "vigorousIntensityMinutes": 20,
+            },
+        ]
+
+
 def build_client() -> TestClient:
     """Create a test client with network-dependent orchestration replaced."""
     app = create_app()
@@ -189,6 +229,17 @@ def build_client_with_garmin_credentials(tmp_path) -> TestClient:
     app.dependency_overrides[get_training_data_provider_factory] = (
         lambda: FakeTrainingProvider
     )
+    return TestClient(app)
+
+
+def build_client_with_training_metrics() -> TestClient:
+    """Create a test client with fake training data for metrics requests."""
+    app = create_app()
+    FakeMetricsTrainingClient.calls.clear()
+    app.dependency_overrides[get_orchestrator] = FakeOrchestrator
+    app.dependency_overrides[get_current_user] = lambda: _fake_user(user_id=7)
+    app.dependency_overrides[get_training_client] = FakeMetricsTrainingClient
+    app.dependency_overrides[get_training_metrics_service] = TrainingMetricsService
     return TestClient(app)
 
 
@@ -408,6 +459,75 @@ def test_chat_stream_returns_error_event_for_runtime_failure() -> None:
             "delta": "backend unavailable",
         }
     ]
+
+
+def test_training_metrics_returns_aggregates_for_date_range() -> None:
+    """Verify the training metrics endpoint returns compact sport aggregates."""
+    client = build_client_with_training_metrics()
+
+    response = client.get("/training/metrics?begin_date=2026-07-01&end_date=2026-07-31")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "begin_date": "2026-07-01",
+        "end_date": "2026-07-31",
+        "sports": [
+            {
+                "sport": "running",
+                "label": "Run",
+                "activity_count": 1,
+                "hours": 1.0,
+                "total_duration_seconds": 3600.0,
+                "total_training_load": 120.0,
+                "moderate_intensity_minutes": 0.0,
+                "vigorous_intensity_minutes": 0.0,
+                "intensity_score": 120.0,
+                "intensity_source": "training_load",
+            },
+            {
+                "sport": "cycling",
+                "label": "Bike",
+                "activity_count": 1,
+                "hours": 0.5,
+                "total_duration_seconds": 1800.0,
+                "total_training_load": None,
+                "moderate_intensity_minutes": 10.0,
+                "vigorous_intensity_minutes": 20.0,
+                "intensity_score": 50.0,
+                "intensity_source": "intensity_minutes",
+            },
+            {
+                "sport": "swimming",
+                "label": "Swim",
+                "activity_count": 0,
+                "hours": 0.0,
+                "total_duration_seconds": 0.0,
+                "total_training_load": None,
+                "moderate_intensity_minutes": 0.0,
+                "vigorous_intensity_minutes": 0.0,
+                "intensity_score": None,
+                "intensity_source": "none",
+            },
+        ],
+    }
+    assert FakeMetricsTrainingClient.calls == [
+        {
+            "user_id": 7,
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "activity_type": None,
+        }
+    ]
+
+
+def test_training_metrics_rejects_reversed_date_range() -> None:
+    """Verify the metrics endpoint validates the selected date range."""
+    client = build_client_with_training_metrics()
+
+    response = client.get("/training/metrics?begin_date=2026-07-31&end_date=2026-07-01")
+
+    assert response.status_code == 422
+    assert "begin_date" in response.json()["detail"]
 
 
 def test_put_nutrition_diary_entry_creates_day(tmp_path) -> None:

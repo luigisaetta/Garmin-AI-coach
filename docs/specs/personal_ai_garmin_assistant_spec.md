@@ -195,6 +195,41 @@ The assistant backend must not:
 * Introduce MCP server dependencies in the initial version
 * Give prescriptive medical or nutrition advice in place of a qualified professional
 
+### 6.2.1 Training metrics dashboard
+
+The application may expose a training metrics dashboard in the Next.js
+frontend. The dashboard lets an authenticated local user choose a date interval
+such as the last week, the last month, the current month, or a custom inclusive
+range, then inspect aggregate training volume and intensity for running,
+cycling, and swimming.
+
+The dashboard is a read-only analytics view. The frontend must call backend
+HTTP endpoints through the existing Next.js API proxy pattern. It must not call
+Garmin Connect, import Garmin provider code, or compute the canonical aggregate
+metrics in the browser.
+
+The assistant backend is responsible for:
+
+* Resolving the authenticated application user
+* Reading activities through the user-scoped `TrainingDataProvider` boundary
+* Normalising Garmin activity type variants into running, cycling, and swimming
+* Aggregating hours, activity count, and intensity values per sport
+* Returning only compact aggregate metrics to the frontend
+
+The initial intensity metric should prefer Garmin `activityTrainingLoad` when
+present. When training load is absent for a sport, the backend may fall back to
+an intensity-minute score derived from `moderateIntensityMinutes` and
+`vigorousIntensityMinutes`, with vigorous minutes weighted more heavily than
+moderate minutes. API responses must identify which intensity source was used
+for each sport so the UI does not imply false precision.
+
+The Docker Compose service boundary remains unchanged for this feature:
+
+* The Next.js frontend container serves the dashboard and proxy routes
+* The assistant backend container performs the analytics and Garmin provider calls
+* No additional analytics, Garmin, cache, or MCP container is introduced for the
+  initial dashboard
+
 ### 6.3 Garmin data access layer
 
 The Garmin data access layer is responsible for:

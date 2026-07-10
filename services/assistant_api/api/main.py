@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-24
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -32,6 +32,8 @@ from services.assistant_api.api.schemas import (
     NutritionDiaryRewriteRequest,
     NutritionDiaryRewriteResponse,
     NutritionPlanResponse,
+    TrainingMetricsResponse,
+    TrainingSportMetricsResponse,
 )
 from services.assistant_api.identity.garmin_credentials import (
     GarminCredentialError,
@@ -62,10 +64,16 @@ from services.assistant_api.orchestration.chat import (
 )
 from services.assistant_api.orchestration.training_data import (
     LocalTrainingDataClient,
+    TrainingActivitiesClient,
     UserScopedTrainingDataClient,
 )
 from services.garmin_api.training_data_provider import TrainingDataProvider
 from services.assistant_api.persistence import Database, load_database_settings
+from services.assistant_api.training_metrics import (
+    SportMetrics,
+    TrainingMetricsService,
+    TrainingMetricsSummary,
+)
 from services.shared.llm import get_inference_client
 
 LOGGER = logging.getLogger(__name__)
@@ -196,19 +204,7 @@ def get_orchestrator() -> AssistantOrchestrator:
     """Create the assistant orchestrator used by request handlers."""
     settings = load_settings()
     inference_client = get_inference_client()
-    if os.getenv("GARMIN_CREDENTIAL_ENCRYPTION_KEY") or os.getenv(
-        "GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE"
-    ):
-        training_client = UserScopedTrainingDataClient(
-            credential_repository=get_garmin_credential_repository(),
-            session_storage_root=os.getenv(
-                "GARMIN_SESSION_STORAGE_ROOT",
-                "/data/garmin-sessions",
-            ),
-            provider_factory=get_training_data_provider_factory(),
-        )
-    else:
-        training_client = LocalTrainingDataClient(get_training_data_provider())
+    training_client = get_training_client()
     LOGGER.info("orchestrator create model_id=%s", settings.model_id)
     return AssistantOrchestrator(
         settings=settings,
@@ -222,6 +218,27 @@ def get_orchestrator() -> AssistantOrchestrator:
             settings=NutritionAnalysisSettings(model_id=settings.model_id),
         ),
     )
+
+
+def get_training_client() -> TrainingActivitiesClient:
+    """Create the training data client used by assistant and analytics routes."""
+    if os.getenv("GARMIN_CREDENTIAL_ENCRYPTION_KEY") or os.getenv(
+        "GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE"
+    ):
+        return UserScopedTrainingDataClient(
+            credential_repository=get_garmin_credential_repository(),
+            session_storage_root=os.getenv(
+                "GARMIN_SESSION_STORAGE_ROOT",
+                "/data/garmin-sessions",
+            ),
+            provider_factory=get_training_data_provider_factory(),
+        )
+    return LocalTrainingDataClient(get_training_data_provider())
+
+
+def get_training_metrics_service() -> TrainingMetricsService:
+    """Create the training metrics service."""
+    return TrainingMetricsService()
 
 
 def add_request_logging(api: FastAPI) -> None:
@@ -259,7 +276,7 @@ def add_request_logging(api: FastAPI) -> None:
         return response
 
 
-def create_app() -> FastAPI:
+def create_app() -> FastAPI:  # pylint: disable=too-many-statements
     """Create the FastAPI application for uvicorn."""
     configure_logging()
     api = FastAPI(
@@ -385,6 +402,34 @@ def create_app() -> FastAPI:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
+
+    @api.get("/training/metrics", response_model=TrainingMetricsResponse)
+    async def get_training_metrics(
+        begin_date: date,
+        end_date: date,
+        current_user: ApplicationUser = Depends(get_current_user),
+        training_client: TrainingActivitiesClient = Depends(get_training_client),
+        metrics_service: TrainingMetricsService = Depends(get_training_metrics_service),
+    ) -> TrainingMetricsResponse:
+        """Return aggregate running, cycling, and swimming metrics."""
+        LOGGER.info(
+            "training metrics request begin_date=%s end_date=%s",
+            begin_date,
+            end_date,
+        )
+        try:
+            summary = await metrics_service.summarize(
+                training_client=training_client,
+                user_id=current_user.id,
+                begin_date=begin_date,
+                end_date=end_date,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return _training_metrics_response(summary)
 
     @api.post(
         "/nutrition/diary-entries",
@@ -579,6 +624,33 @@ def _nutrition_plan_response(plan: NutritionPlan) -> NutritionPlanResponse:
         extracted_text=plan.extracted_text,
         uploaded_at=plan.uploaded_at,
         updated_at=plan.updated_at,
+    )
+
+
+def _training_metrics_response(
+    summary: TrainingMetricsSummary,
+) -> TrainingMetricsResponse:
+    """Convert training metrics into the API response schema."""
+    return TrainingMetricsResponse(
+        begin_date=summary.begin_date,
+        end_date=summary.end_date,
+        sports=[_sport_metrics_response(sport) for sport in summary.sports],
+    )
+
+
+def _sport_metrics_response(sport: SportMetrics) -> TrainingSportMetricsResponse:
+    """Convert one sport metrics object into the API response schema."""
+    return TrainingSportMetricsResponse(
+        sport=sport.sport,
+        label=sport.label,
+        activity_count=sport.activity_count,
+        hours=sport.hours,
+        total_duration_seconds=sport.total_duration_seconds,
+        total_training_load=sport.total_training_load,
+        moderate_intensity_minutes=sport.moderate_intensity_minutes,
+        vigorous_intensity_minutes=sport.vigorous_intensity_minutes,
+        intensity_score=sport.intensity_score,
+        intensity_source=sport.intensity_source,
     )
 
 

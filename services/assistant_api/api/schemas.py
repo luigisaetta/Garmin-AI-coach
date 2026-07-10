@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-15
+Date Modified: 2026-07-10
 License: MIT
 """
 
@@ -69,6 +69,29 @@ class HealthResponse(BaseModel):
 
     status: Literal["ok"]
     service: Literal["assistant_api"]
+
+
+class TrainingSportMetricsResponse(BaseModel):
+    """Aggregate training metrics for one dashboard sport bucket."""
+
+    sport: Literal["running", "cycling", "swimming"]
+    label: str
+    activity_count: int
+    hours: float
+    total_duration_seconds: float
+    total_training_load: float | None = None
+    moderate_intensity_minutes: float
+    vigorous_intensity_minutes: float
+    intensity_score: float | None = None
+    intensity_source: Literal["training_load", "intensity_minutes", "none"]
+
+
+class TrainingMetricsResponse(BaseModel):
+    """Aggregate training metrics returned for a selected date range."""
+
+    begin_date: date
+    end_date: date
+    sports: list[TrainingSportMetricsResponse]
 
 
 class GarminCredentialRequest(BaseModel):
