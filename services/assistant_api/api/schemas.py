@@ -98,6 +98,23 @@ class TrainingMetricsResponse(BaseModel):
     sports: list[TrainingSportMetricsResponse]
 
 
+class TrainingMetricsAnalysisRequest(BaseModel):
+    """Request payload for generating an LLM metrics analysis."""
+
+    begin_date: date
+    end_date: date
+    response_language: Literal["italian", "english"] = "italian"
+
+
+class TrainingMetricsAnalysisResponse(BaseModel):
+    """LLM analysis returned for one training metrics date range."""
+
+    begin_date: date
+    end_date: date
+    analysis: str
+    token_usage: TokenUsage | None = None
+
+
 class GarminCredentialRequest(BaseModel):
     """Request payload for saving Garmin Connect credentials."""
 

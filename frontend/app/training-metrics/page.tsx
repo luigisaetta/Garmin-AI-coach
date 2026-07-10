@@ -20,6 +20,7 @@ import {
   Moon,
   RefreshCcw,
   Settings2,
+  Sparkles,
   Sun,
   Waves,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "black";
 type MetricsState = "idle" | "loading" | "ready" | "error";
+type AnalysisState = "idle" | "loading" | "ready" | "error";
 type RangePreset = "week" | "month" | "currentMonth" | "custom";
 type SportKey = "running" | "cycling" | "swimming";
 type IntensitySource = "training_load" | "intensity_minutes" | "none";
@@ -53,6 +55,17 @@ type TrainingMetricsResponse = {
   begin_date: string;
   end_date: string;
   sports: SportMetrics[];
+};
+
+type TrainingMetricsAnalysisResponse = {
+  begin_date: string;
+  end_date: string;
+  analysis: string;
+  token_usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  } | null;
 };
 
 const RANGE_PRESETS: { value: RangePreset; label: string }[] = [
@@ -132,6 +145,12 @@ export default function TrainingMetricsPage() {
   const [metricsState, setMetricsState] = useState<MetricsState>("idle");
   const [metrics, setMetrics] = useState<TrainingMetricsResponse | null>(null);
   const [statusMessage, setStatusMessage] = useState("Ready to load metrics");
+  const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
+  const [analysis, setAnalysis] =
+    useState<TrainingMetricsAnalysisResponse | null>(null);
+  const [analysisMessage, setAnalysisMessage] = useState(
+    "Generate a coach summary when metrics are ready",
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -190,6 +209,9 @@ export default function TrainingMetricsPage() {
 
     setMetricsState("loading");
     setStatusMessage("Loading Garmin activities");
+    setAnalysisState("idle");
+    setAnalysis(null);
+    setAnalysisMessage("Generate a coach summary when metrics are ready");
 
     try {
       const params = new URLSearchParams({
@@ -211,6 +233,50 @@ export default function TrainingMetricsPage() {
     } catch {
       setMetricsState("error");
       setStatusMessage("Could not load training metrics");
+    }
+  }
+
+  async function generateAnalysis() {
+    const activeBeginDate = metrics?.begin_date ?? beginDate;
+    const activeEndDate = metrics?.end_date ?? endDate;
+
+    if (!metrics || metricsState !== "ready") {
+      setAnalysisState("error");
+      setAnalysisMessage("Load metrics before generating the analysis");
+      return;
+    }
+
+    setAnalysisState("loading");
+    setAnalysisMessage("Generating AI coach analysis");
+
+    try {
+      const response = await fetch("/api/training/metrics/analysis", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          begin_date: activeBeginDate,
+          end_date: activeEndDate,
+          response_language: "italian",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Training metrics analysis API returned HTTP ${response.status}`,
+        );
+      }
+
+      const nextAnalysis =
+        (await response.json()) as TrainingMetricsAnalysisResponse;
+      setAnalysis(nextAnalysis);
+      setAnalysisState("ready");
+      setAnalysisMessage("AI analysis ready");
+    } catch {
+      setAnalysisState("error");
+      setAnalysisMessage("Could not generate the AI analysis");
     }
   }
 
@@ -476,6 +542,51 @@ export default function TrainingMetricsPage() {
             );
           })}
         </div>
+
+        <section className="analysisPanel" aria-label="AI training analysis">
+          <div className="analysisHeader">
+            <span>
+              <Sparkles size={18} />
+              <span>
+                <h3>AI coach analysis</h3>
+                <p>{analysisMessage}</p>
+              </span>
+            </span>
+            <button
+              className="analysisButton"
+              type="button"
+              disabled={metricsState !== "ready" || analysisState === "loading"}
+              onClick={() => {
+                void generateAnalysis();
+              }}
+            >
+              <Sparkles size={16} />
+              <span>
+                {analysisState === "loading" ? "Generating" : "Generate analysis"}
+              </span>
+            </button>
+          </div>
+
+          {analysisState === "ready" && analysis ? (
+            <div className="analysisText">
+              {analysis.analysis.split("\n").map((line, index) => (
+                <p key={`${index}-${line}`}>{line}</p>
+              ))}
+            </div>
+          ) : (
+            <div
+              className={`analysisPlaceholder ${
+                analysisState === "error" ? "error" : ""
+              }`}
+            >
+              <p>
+                {analysisState === "error"
+                  ? analysisMessage
+                  : "The analysis uses only the aggregate metrics shown above and is generated on demand."}
+              </p>
+            </div>
+          )}
+        </section>
       </section>
     </main>
   );

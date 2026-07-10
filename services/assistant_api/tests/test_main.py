@@ -24,6 +24,7 @@ from services.assistant_api.api.main import (
     get_orchestrator,
     get_training_client,
     get_training_data_provider_factory,
+    get_training_metrics_analysis_service,
     get_training_metrics_service,
     get_user_repository,
 )
@@ -41,6 +42,9 @@ from services.assistant_api.nutrition.plan import NutritionPlanService
 from services.assistant_api.nutrition.rewrite import NutritionDiaryRewriteResult
 from services.assistant_api.tests.database import build_test_database
 from services.assistant_api.training_metrics import TrainingMetricsService
+from services.assistant_api.training_metrics_analysis import (
+    TrainingMetricsAnalysisResult,
+)
 
 
 class FakeOrchestrator:
@@ -193,6 +197,31 @@ class FakeMetricsTrainingClient:  # pylint: disable=too-few-public-methods
         ]
 
 
+class FakeTrainingMetricsAnalysisService:  # pylint: disable=too-few-public-methods
+    """Fake LLM training metrics analysis service used by endpoint tests."""
+
+    calls: list[dict[str, object]] = []
+
+    async def analyze(
+        self,
+        *,
+        summary,
+        response_language: str = "italian",
+    ) -> TrainingMetricsAnalysisResult:
+        """Record the aggregate summary and return a deterministic analysis."""
+        FakeTrainingMetricsAnalysisService.calls.append(
+            {
+                "begin_date": summary.begin_date.isoformat(),
+                "end_date": summary.end_date.isoformat(),
+                "response_language": response_language,
+                "sport_count": len(summary.sports),
+            }
+        )
+        return TrainingMetricsAnalysisResult(
+            analysis="Periodo con carico concentrato sulla corsa."
+        )
+
+
 def build_client() -> TestClient:
     """Create a test client with network-dependent orchestration replaced."""
     app = create_app()
@@ -275,10 +304,14 @@ def build_client_with_training_metrics() -> TestClient:
     """Create a test client with fake training data for metrics requests."""
     app = create_app()
     FakeMetricsTrainingClient.calls.clear()
+    FakeTrainingMetricsAnalysisService.calls.clear()
     app.dependency_overrides[get_orchestrator] = FakeOrchestrator
     app.dependency_overrides[get_current_user] = lambda: _fake_user(user_id=7)
     app.dependency_overrides[get_training_client] = FakeMetricsTrainingClient
     app.dependency_overrides[get_training_metrics_service] = TrainingMetricsService
+    app.dependency_overrides[get_training_metrics_analysis_service] = (
+        FakeTrainingMetricsAnalysisService
+    )
     return TestClient(app)
 
 
@@ -597,6 +630,60 @@ def test_training_metrics_rejects_reversed_date_range() -> None:
     client = build_client_with_training_metrics()
 
     response = client.get("/training/metrics?begin_date=2026-07-31&end_date=2026-07-01")
+
+    assert response.status_code == 422
+    assert "begin_date" in response.json()["detail"]
+
+
+def test_training_metrics_analysis_returns_llm_summary() -> None:
+    """Verify clients can request an on-demand metrics analysis."""
+    client = build_client_with_training_metrics()
+
+    response = client.post(
+        "/training/metrics/analysis",
+        json={
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "response_language": "italian",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "begin_date": "2026-07-01",
+        "end_date": "2026-07-31",
+        "analysis": "Periodo con carico concentrato sulla corsa.",
+        "token_usage": None,
+    }
+    assert FakeMetricsTrainingClient.calls == [
+        {
+            "user_id": 7,
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "activity_type": None,
+        }
+    ]
+    assert FakeTrainingMetricsAnalysisService.calls == [
+        {
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "response_language": "italian",
+            "sport_count": 3,
+        }
+    ]
+
+
+def test_training_metrics_analysis_rejects_reversed_date_range() -> None:
+    """Verify the analysis endpoint validates the selected date range."""
+    client = build_client_with_training_metrics()
+
+    response = client.post(
+        "/training/metrics/analysis",
+        json={
+            "begin_date": "2026-07-31",
+            "end_date": "2026-07-01",
+        },
+    )
 
     assert response.status_code == 422
     assert "begin_date" in response.json()["detail"]

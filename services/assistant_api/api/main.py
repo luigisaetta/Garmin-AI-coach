@@ -32,6 +32,8 @@ from services.assistant_api.api.schemas import (
     NutritionDiaryRewriteRequest,
     NutritionDiaryRewriteResponse,
     NutritionPlanResponse,
+    TrainingMetricsAnalysisRequest,
+    TrainingMetricsAnalysisResponse,
     TrainingMetricsResponse,
     TrainingSportMetricsResponse,
 )
@@ -77,6 +79,11 @@ from services.assistant_api.training_metrics import (
     SportMetrics,
     TrainingMetricsService,
     TrainingMetricsSummary,
+)
+from services.assistant_api.training_metrics_analysis import (
+    TrainingMetricsAnalysisError,
+    TrainingMetricsAnalysisService,
+    TrainingMetricsAnalysisSettings,
 )
 from services.shared.llm import get_inference_client
 
@@ -245,6 +252,15 @@ def get_training_metrics_service() -> TrainingMetricsService:
     return TrainingMetricsService()
 
 
+def get_training_metrics_analysis_service() -> TrainingMetricsAnalysisService:
+    """Create the training metrics analysis service."""
+    settings = load_settings()
+    return TrainingMetricsAnalysisService(
+        inference_client=get_inference_client(),
+        settings=TrainingMetricsAnalysisSettings(model_id=settings.model_id),
+    )
+
+
 def add_request_logging(api: FastAPI) -> None:
     """Attach HTTP request logging before endpoint dependencies run."""
 
@@ -280,7 +296,7 @@ def add_request_logging(api: FastAPI) -> None:
         return response
 
 
-def create_app() -> FastAPI:  # pylint: disable=too-many-statements
+def create_app() -> FastAPI:  # pylint: disable=too-many-locals,too-many-statements
     """Create the FastAPI application for uvicorn."""
     configure_logging()
     api = FastAPI(
@@ -444,6 +460,53 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-statements
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
         return _training_metrics_response(summary)
+
+    @api.post(
+        "/training/metrics/analysis",
+        response_model=TrainingMetricsAnalysisResponse,
+    )
+    async def analyze_training_metrics(
+        request: TrainingMetricsAnalysisRequest,
+        current_user: ApplicationUser = Depends(get_current_user),
+        training_client: TrainingActivitiesClient = Depends(get_training_client),
+        metrics_service: TrainingMetricsService = Depends(get_training_metrics_service),
+        analysis_service: TrainingMetricsAnalysisService = Depends(
+            get_training_metrics_analysis_service
+        ),
+    ) -> TrainingMetricsAnalysisResponse:
+        """Generate an LLM analysis for aggregate training metrics."""
+        LOGGER.info(
+            "training metrics analysis request begin_date=%s end_date=%s",
+            request.begin_date,
+            request.end_date,
+        )
+        try:
+            summary = await metrics_service.summarize(
+                training_client=training_client,
+                user_id=current_user.id,
+                begin_date=request.begin_date,
+                end_date=request.end_date,
+            )
+            result = await analysis_service.analyze(
+                summary=summary,
+                response_language=request.response_language,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except GARMIN_PROVIDER_ERRORS as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=safe_garmin_error_message(exc),
+            ) from exc
+        except (TrainingMetricsAnalysisError, RuntimeError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return TrainingMetricsAnalysisResponse(
+            begin_date=summary.begin_date,
+            end_date=summary.end_date,
+            analysis=result.analysis,
+            token_usage=result.token_usage,
+        )
 
     @api.post(
         "/nutrition/diary-entries",

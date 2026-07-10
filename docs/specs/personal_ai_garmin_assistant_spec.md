@@ -235,6 +235,24 @@ activity payloads:
 * Duration-weighted average anaerobic training effect, derived from
   `anaerobicTrainingEffect` and `duration`
 
+The dashboard may expose an on-demand LLM coach analysis below the numeric
+metrics. This analysis must use a dedicated assistant backend service and a
+dedicated HTTP endpoint, not the interactive chat endpoint. The frontend must
+show an explicit button such as "Generate analysis" and must not automatically
+call the LLM when the date range changes.
+
+The training metrics analysis service must:
+
+* Reuse the existing OCI Enterprise AI Responses API infrastructure
+* Use a dedicated prompt scoped to concise endurance-training interpretation
+* Recompute or load the canonical backend aggregate metrics for the requested
+  user and date range
+* Send only compact aggregate metrics to the model, never raw Garmin activity
+  payloads, credentials, session paths, or tokens
+* Return a short synthetic coaching analysis and token usage when available
+* Treat missing training load, heart-rate, or training-effect values as
+  uncertainty rather than inventing detail
+
 The Docker Compose service boundary remains unchanged for this feature:
 
 * The Next.js frontend container serves the dashboard and proxy routes
