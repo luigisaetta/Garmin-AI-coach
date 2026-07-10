@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-10
+
+### Added
+
+- Added the Training metrics dashboard for run, bike, and swim summaries over a
+  selected date range.
+- Added derived training metrics including load per hour, duration-weighted
+  heart rate, and average aerobic and anaerobic training effect.
+- Added on-demand LLM analysis for Training metrics through a dedicated backend
+  service and Responses API endpoint.
+- Added the Training trends dashboard with weekly ISO-week load trends,
+  sport-specific stacked load, four-week rolling average, week-over-week delta,
+  and acute/chronic load ratio.
+
+### Changed
+
+- Switched the default OCI hosted model identifier to `openai.gpt-5.5`.
+- Added sidebar navigation for the new Training trends page.
+
+### Verified
+
+- Python tests, formatting, and linting pass.
+- Frontend linting and production build pass.
+- Docker Compose deployment on Proxima was rebuilt and verified healthy.
+
 ## 2026-05-22
 
 ### Changed
