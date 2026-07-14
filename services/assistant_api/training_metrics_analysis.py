@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-10
+Date Modified: 2026-07-14
 License: MIT
 """
 
@@ -80,7 +80,7 @@ class TrainingMetricsAnalysisService:  # pylint: disable=too-few-public-methods
         self,
         *,
         summary: TrainingMetricsSummary,
-        response_language: TrainingMetricsAnalysisLanguage = "italian",
+        response_language: TrainingMetricsAnalysisLanguage = "english",
     ) -> TrainingMetricsAnalysisResult:
         """Generate a synthetic coaching analysis for aggregate metrics."""
         if response_language not in {"italian", "english"}:

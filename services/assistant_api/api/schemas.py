@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-10
+Date Modified: 2026-07-14
 License: MIT
 """
 
@@ -103,7 +103,7 @@ class TrainingMetricsAnalysisRequest(BaseModel):
 
     begin_date: date
     end_date: date
-    response_language: Literal["italian", "english"] = "italian"
+    response_language: Literal["italian", "english"] = "english"
 
 
 class TrainingMetricsAnalysisResponse(BaseModel):

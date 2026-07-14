@@ -120,6 +120,20 @@ def test_build_training_metrics_analysis_payload_includes_missing_sports() -> No
     assert payload["sports"][2]["total_training_load"] is None
 
 
+def test_training_metrics_analysis_defaults_to_english() -> None:
+    """Verify the default model payload requests an English response."""
+    inference_client = FakeInferenceClient("Balanced training week.")
+    service = TrainingMetricsAnalysisService(
+        inference_client=inference_client,
+        settings=TrainingMetricsAnalysisSettings(model_id="openai.gpt-5.5"),
+    )
+
+    asyncio.run(service.analyze(summary=_summary()))
+
+    payload = json.loads(inference_client.responses.requests[0]["input"][0]["content"])
+    assert payload["response_language"] == "english"
+
+
 def test_training_metrics_analysis_raises_when_model_returns_empty_text() -> None:
     """Verify empty Responses output fails clearly."""
     service = TrainingMetricsAnalysisService(

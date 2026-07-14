@@ -241,6 +241,10 @@ dedicated HTTP endpoint, not the interactive chat endpoint. The frontend must
 show an explicit button such as "Generate analysis" and must not automatically
 call the LLM when the date range changes.
 
+The analysis panel must let the user select English or Italian for the
+generated response. English is the default. The selected language must be sent
+to the dedicated backend endpoint and included in the model input payload.
+
 The training metrics analysis service must:
 
 * Reuse the existing OCI Enterprise AI Responses API infrastructure

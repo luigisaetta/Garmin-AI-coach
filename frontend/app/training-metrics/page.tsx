@@ -36,6 +36,7 @@ type AnalysisState = "idle" | "loading" | "ready" | "error";
 type RangePreset = "week" | "month" | "currentMonth" | "custom";
 type SportKey = "running" | "cycling" | "swimming";
 type IntensitySource = "training_load" | "intensity_minutes" | "none";
+type AnalysisLanguage = "italian" | "english";
 
 type SportMetrics = {
   sport: SportKey;
@@ -151,6 +152,8 @@ export default function TrainingMetricsPage() {
   const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
   const [analysis, setAnalysis] =
     useState<TrainingMetricsAnalysisResponse | null>(null);
+  const [analysisLanguage, setAnalysisLanguage] =
+    useState<AnalysisLanguage>("english");
   const [analysisMessage, setAnalysisMessage] = useState(
     "Generate a coach summary when metrics are ready",
   );
@@ -262,7 +265,7 @@ export default function TrainingMetricsPage() {
         body: JSON.stringify({
           begin_date: activeBeginDate,
           end_date: activeEndDate,
-          response_language: "italian",
+          response_language: analysisLanguage,
         }),
       });
 
@@ -559,19 +562,35 @@ export default function TrainingMetricsPage() {
                 <p>{analysisMessage}</p>
               </span>
             </span>
-            <button
-              className="analysisButton"
-              type="button"
-              disabled={metricsState !== "ready" || analysisState === "loading"}
-              onClick={() => {
-                void generateAnalysis();
-              }}
-            >
-              <Sparkles size={16} />
-              <span>
-                {analysisState === "loading" ? "Generating" : "Generate analysis"}
-              </span>
-            </button>
+            <div className="analysisControls">
+              <label className="analysisLanguage" htmlFor="analysis-language">
+                <span>Language</span>
+                <select
+                  id="analysis-language"
+                  value={analysisLanguage}
+                  disabled={analysisState === "loading"}
+                  onChange={(event) => {
+                    setAnalysisLanguage(event.target.value as AnalysisLanguage);
+                  }}
+                >
+                  <option value="english">English</option>
+                  <option value="italian">Italiano</option>
+                </select>
+              </label>
+              <button
+                className="analysisButton"
+                type="button"
+                disabled={metricsState !== "ready" || analysisState === "loading"}
+                onClick={() => {
+                  void generateAnalysis();
+                }}
+              >
+                <Sparkles size={16} />
+                <span>
+                  {analysisState === "loading" ? "Generating" : "Generate analysis"}
+                </span>
+              </button>
+            </div>
           </div>
 
           {analysisState === "ready" && analysis ? (

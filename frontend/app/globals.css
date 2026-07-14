@@ -884,6 +884,28 @@ textarea:disabled {
   white-space: nowrap;
 }
 
+.analysisControls {
+  align-items: flex-end;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.analysisLanguage {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.75rem;
+  gap: 0.25rem;
+}
+
+.analysisLanguage select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  color: var(--text);
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+}
+
 .analysisButton:hover:not(:disabled) {
   border-color: var(--accent-strong);
   background: var(--accent-strong);
@@ -1513,6 +1535,11 @@ textarea:disabled {
 
   .analysisButton {
     width: 100%;
+  }
+
+  .analysisControls {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .message,

@@ -815,6 +815,24 @@ def test_training_metrics_analysis_rejects_reversed_date_range() -> None:
     assert "begin_date" in response.json()["detail"]
 
 
+def test_training_metrics_analysis_defaults_to_english() -> None:
+    """Verify omitted analysis language uses English by default."""
+    client = build_client_with_training_metrics()
+
+    response = client.post(
+        "/training/metrics/analysis",
+        json={
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        FakeTrainingMetricsAnalysisService.calls[-1]["response_language"] == "english"
+    )
+
+
 def test_training_trends_returns_weekly_series() -> None:
     """Verify clients can request weekly training trends."""
     client = build_client_with_training_trends()
