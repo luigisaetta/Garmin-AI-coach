@@ -40,6 +40,9 @@ pnpm-debug.log*
 # Docker and local runtime
 docker-compose.override.yml
 data/
+exports/
+exports-test/
+garmin-export-session/
 *.pid
 *.log
 
