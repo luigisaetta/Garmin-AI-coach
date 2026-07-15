@@ -421,6 +421,13 @@ provided through `GARMIN_CREDENTIAL_ENCRYPTION_KEY` or a mounted secret file
 referenced by `GARMIN_CREDENTIAL_ENCRYPTION_KEY_FILE`. User-scoped Garmin
 session tokens are stored under `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`.
 
+The legacy single-user Garmin credential and session-token path is abandoned.
+Runtime code, local verification, and future development must use only the
+multi-user credential repository and user-scoped session storage. Legacy
+environment variables or token paths such as `GARMIN_USERNAME`,
+`GARMIN_PASSWORD`, and `GARMIN_SESSION_STORAGE_PATH` must not be used as a
+fallback for Garmin Connect access.
+
 ## 7. Initial container model
 
 Docker Compose should define at least these services:
@@ -902,9 +909,10 @@ Likely configuration values:
 
 Secrets must not be committed to the repository.
 
-Single-user Garmin username and password environment variables may remain
-temporarily available only as a backwards-compatible local development path.
-They must not be the primary mechanism for multi-user operation.
+Single-user Garmin username and password environment variables are not a
+supported Garmin Connect access mechanism. All Garmin Connect access must use
+the multi-user credential repository and `GARMIN_SESSION_STORAGE_ROOT/<user_id>/`
+session storage.
 
 ## 15. Security and privacy requirements
 
@@ -1127,8 +1135,8 @@ Remaining:
 * Current-user display or a safe current-user endpoint
 * Documentation of Basic Auth logout limitations
 * Broader HTTP-level cross-user isolation tests across protected endpoints
-* Eventual removal or stricter isolation of the legacy single-user Garmin
-  environment fallback from the default multi-user runtime
+* Removal of any remaining legacy single-user Garmin credential or session
+  fallback from runtime documentation and code paths
 
 ## 22. Open questions
 

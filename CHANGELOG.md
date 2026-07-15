@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-15
+
+### Changed
+
+- Documented that Garmin Connect access now uses only the multi-user credential
+  repository and user-scoped session storage. The legacy single-user Garmin
+  credential and token path is abandoned and must not be used as a fallback.
+
 ## 2026-07-10
 
 ### Added
