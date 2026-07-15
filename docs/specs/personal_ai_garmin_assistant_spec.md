@@ -269,6 +269,11 @@ non-technical summaries such as recent volume, current weekly load, load trend,
 sport mix, and recovery or overload caution signals. It must not present goal
 adherence until explicit user goal management exists.
 
+When the latest ISO week is still in progress, the Coach Overview must avoid
+interpreting week-to-date load as if it were a complete week. Any load delta,
+recovery, or overload signal for the active week should either be explicitly
+labelled as week-to-date or based on a clearly labelled projection.
+
 The frontend may derive display-only labels from compact aggregate responses,
 but it must not call Garmin Connect directly or import Garmin provider code.
 Canonical metrics and trend data must continue to come from backend endpoints

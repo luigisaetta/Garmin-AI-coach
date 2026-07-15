@@ -76,6 +76,14 @@ type TrainingTrendsResponse = {
   weeks: TrendWeek[];
 };
 
+type WeekSignalContext = {
+  isInProgress: boolean;
+  elapsedDays: number;
+  projectedTrainingLoad: number | null;
+  comparisonDeltaPercent: number | null;
+  comparisonRatio: number | null;
+};
+
 const SPORT_ICONS = {
   running: Activity,
   cycling: Bike,
@@ -119,14 +127,79 @@ function sportLoad(week: TrendWeek, sport: SportKey) {
   );
 }
 
-function buildLoadSignal(currentWeek: TrendWeek | null) {
-  const delta = currentWeek?.previous_week_delta_percent;
-  const ratio = currentWeek?.acute_chronic_load_ratio;
+function parseIsoDate(value: string) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function buildWeekSignalContext(
+  currentWeek: TrendWeek | null,
+  previousWeeks: TrendWeek[],
+  today = new Date(),
+): WeekSignalContext {
+  if (!currentWeek) {
+    return {
+      isInProgress: false,
+      elapsedDays: 7,
+      projectedTrainingLoad: null,
+      comparisonDeltaPercent: null,
+      comparisonRatio: null,
+    };
+  }
+
+  const weekStart = parseIsoDate(currentWeek.week_start);
+  const weekEnd = parseIsoDate(currentWeek.week_end);
+  const currentDay = parseIsoDate(isoDate(today));
+  const isInProgress = currentDay >= weekStart && currentDay < weekEnd;
+  const elapsedDays = isInProgress
+    ? Math.min(
+        7,
+        Math.max(
+          1,
+          Math.floor(
+            (currentDay.getTime() - weekStart.getTime()) / 86_400_000,
+          ) + 1,
+        ),
+      )
+    : 7;
+  const projectedTrainingLoad = isInProgress
+    ? (currentWeek.total_training_load / elapsedDays) * 7
+    : currentWeek.total_training_load;
+  const previousWeek = previousWeeks.at(-1) ?? null;
+  const previousLoad = previousWeek?.total_training_load ?? null;
+  const recentCompletedLoads = previousWeeks
+    .slice(-4)
+    .map((week) => week.total_training_load)
+    .filter((load) => load > 0);
+  const recentCompletedAverage =
+    recentCompletedLoads.length > 0
+      ? recentCompletedLoads.reduce((total, load) => total + load, 0) /
+        recentCompletedLoads.length
+      : null;
+
+  return {
+    isInProgress,
+    elapsedDays,
+    projectedTrainingLoad,
+    comparisonDeltaPercent:
+      previousLoad !== null && previousLoad > 0
+        ? ((projectedTrainingLoad - previousLoad) / previousLoad) * 100
+        : null,
+    comparisonRatio:
+      recentCompletedAverage !== null && recentCompletedAverage > 0
+        ? projectedTrainingLoad / recentCompletedAverage
+        : null,
+  };
+}
+
+function buildLoadSignal(context: WeekSignalContext) {
+  const delta = context.comparisonDeltaPercent;
+  const ratio = context.comparisonRatio;
+  const prefix = context.isInProgress ? "Projected week load" : "Current load";
 
   if (ratio !== null && ratio !== undefined && ratio >= 1.4) {
     return {
       label: "High strain",
-      detail: "Current load is high versus recent baseline. Keep the next hard session honest.",
+      detail: `${prefix} is high versus recent baseline. Keep the next hard session honest.`,
       tone: "caution",
     };
   }
@@ -134,29 +207,33 @@ function buildLoadSignal(currentWeek: TrendWeek | null) {
   if (delta !== null && delta !== undefined && delta > 25) {
     return {
       label: "Load jump",
-      detail: "This week rose quickly. A lighter day would make the trend easier to absorb.",
+      detail: `${prefix} is rising quickly. A lighter day would make the trend easier to absorb.`,
       tone: "caution",
     };
   }
 
   if (delta !== null && delta !== undefined && delta < -20) {
     return {
-      label: "Reduced load",
-      detail: "Training load is down this week. Useful if recovery was the intention.",
+      label: context.isInProgress ? "Tracking lower" : "Reduced load",
+      detail: context.isInProgress
+        ? "The week is still in progress; projected load is below last week if the current rhythm continues."
+        : "Training load is down this week. Useful if recovery was the intention.",
       tone: "steady",
     };
   }
 
   return {
-    label: "Steady build",
-    detail: "Recent load looks controlled. Keep recovery aligned with the next quality session.",
+    label: context.isInProgress ? "Week in progress" : "Steady build",
+    detail: context.isInProgress
+      ? `Using ${context.elapsedDays} days of data, projected load looks controlled. Keep recovery aligned with the next quality session.`
+      : "Recent load looks controlled. Keep recovery aligned with the next quality session.",
     tone: "good",
   };
 }
 
-function buildRecoverySignal(currentWeek: TrendWeek | null) {
-  const ratio = currentWeek?.acute_chronic_load_ratio;
-  const delta = currentWeek?.previous_week_delta_percent;
+function buildRecoverySignal(context: WeekSignalContext) {
+  const ratio = context.comparisonRatio;
+  const delta = context.comparisonDeltaPercent;
 
   if (
     (ratio !== null && ratio !== undefined && ratio >= 1.4) ||
@@ -171,8 +248,10 @@ function buildRecoverySignal(currentWeek: TrendWeek | null) {
 
   if (ratio !== null && ratio !== undefined && ratio < 0.8) {
     return {
-      label: "Room to build",
-      detail: "Load is below the recent baseline. Add volume gradually if you feel fresh.",
+      label: context.isInProgress ? "Still unfolding" : "Room to build",
+      detail: context.isInProgress
+        ? "The week is not complete yet, so low load is not automatically a recovery signal."
+        : "Load is below the recent baseline. Add volume gradually if you feel fresh.",
       tone: "steady",
     };
   }
@@ -223,8 +302,16 @@ export default function CoachOverviewPage() {
     const sports = [...(metrics?.sports ?? [])].sort((a, b) => b.hours - a.hours);
     return sports[0] ?? null;
   }, [metrics]);
-  const loadSignal = buildLoadSignal(currentWeek);
-  const recoverySignal = buildRecoverySignal(currentWeek);
+  const previousWeeks = useMemo(() => trends?.weeks.slice(0, -1) ?? [], [trends]);
+  const weekSignalContext = useMemo(
+    () => buildWeekSignalContext(currentWeek, previousWeeks),
+    [currentWeek, previousWeeks],
+  );
+  const loadSignal = buildLoadSignal(weekSignalContext);
+  const recoverySignal = buildRecoverySignal(weekSignalContext);
+  const weekDeltaLabel = weekSignalContext.isInProgress
+    ? `Projected ${formatDelta(weekSignalContext.comparisonDeltaPercent)}`
+    : formatDelta(weekSignalContext.comparisonDeltaPercent);
 
   async function loadOverview() {
     const endDate = new Date();
@@ -389,9 +476,13 @@ export default function CoachOverviewPage() {
               <span>{totals.activities} activities</span>
             </article>
             <article>
-              <small>Current week load</small>
+              <small>
+                {weekSignalContext.isInProgress
+                  ? "Week-to-date load"
+                  : "Current week load"}
+              </small>
               <strong>{formatNumber(currentWeek?.total_training_load ?? null)}</strong>
-              <span>{formatDelta(currentWeek?.previous_week_delta_percent ?? null)}</span>
+              <span>{weekDeltaLabel}</span>
             </article>
             <article>
               <small>Main focus</small>
@@ -476,12 +567,16 @@ export default function CoachOverviewPage() {
               <div className="signalCard steady">
                 <Gauge size={18} />
                 <span>
-                  <strong>AC ratio</strong>
+                  <strong>
+                    {weekSignalContext.isInProgress
+                      ? "Projected AC ratio"
+                      : "AC ratio"}
+                  </strong>
                   <small>
-                    {currentWeek?.acute_chronic_load_ratio === null ||
-                    currentWeek?.acute_chronic_load_ratio === undefined
+                    {weekSignalContext.comparisonRatio === null ||
+                    weekSignalContext.comparisonRatio === undefined
                       ? "Not enough baseline data yet"
-                      : formatNumber(currentWeek.acute_chronic_load_ratio)}
+                      : formatNumber(weekSignalContext.comparisonRatio)}
                   </small>
                 </span>
               </div>

@@ -12,6 +12,9 @@
 - Added a separate Coach Overview frontend page as the first navigation item,
   summarising recent volume, current load, weekly trend, recovery caution, and
   sport mix from existing user-scoped training endpoints.
+- Improved Coach Overview interpretation for the active ISO week so partial
+  week-to-date load is labelled clearly and projected before comparison with
+  completed weeks.
 
 ## 2026-07-10
 
