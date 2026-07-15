@@ -12,10 +12,15 @@ by the coach assistant. It uses two independent steps:
    package and loads it into an existing Oracle schema.
 
 The first exporter is implemented. The Oracle loader remains future work.
+The first Oracle schema and loader version exclude HRV persistence until a
+non-empty HRV payload is available for validation.
 
 This document complements `personal_ai_garmin_assistant_spec.md`. The parent
 specification remains authoritative for the `TrainingDataProvider` boundary,
 Python quality requirements, and privacy requirements.
+
+The relational Oracle schema is specified separately in
+`docs/specs/garmin_oracle_schema_spec.md`.
 
 ## 2. Scope
 
@@ -168,7 +173,8 @@ tokens, or Oracle credentials.
 The Oracle loader is not part of the first implementation, but packages must be
 designed for its idempotent import. It must use Oracle `MERGE` operations keyed
 by `(owner_id, activityId)` for activities and `(owner_id, calendar_date)` for
-daily heart-rate and HRV datasets.
+the daily heart-rate dataset. The `daily_hrv.ndjson` file remains part of the
+portable export package but must not be loaded into Oracle version 1.
 
 It must verify every manifest checksum and reject incomplete, altered, or
 unsupported package versions before writing any data to Oracle.
