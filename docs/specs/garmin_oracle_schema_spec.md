@@ -1,5 +1,7 @@
 # Garmin Oracle Schema Specification, Version 1
 
+Last Modified: 2026-07-15
+
 ## 1. Purpose
 
 This document defines the first relational Oracle schema used to load portable

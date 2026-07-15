@@ -1,5 +1,7 @@
 # Personal AI Garmin Assistant Specification
 
+Last Modified: 2026-07-15
+
 ## 1. Purpose
 
 This document defines the initial architecture and implementation constraints

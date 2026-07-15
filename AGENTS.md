@@ -26,6 +26,10 @@ All repository documentation must be written in English.
 
 This includes README files, specifications, architecture notes, setup guides, code comments that document behaviour, and any new documentation added by agents.
 
+Every Markdown specification under `docs/specs/` must include a `Last Modified:
+YYYY-MM-DD` line immediately below its title. Update that date whenever the
+specification is changed, using the real last-modified date.
+
 ### 3. Work from the specification
 
 Use the specification as the source of truth for architecture, responsibilities, boundaries, and development priorities.

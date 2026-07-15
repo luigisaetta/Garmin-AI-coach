@@ -1,5 +1,7 @@
 # CoachPeaking TRIMP Estimation ML Subproject Specification
 
+Last Modified: 2026-07-15
+
 ## 1. Purpose
 
 This document specifies a future supervised machine-learning subproject that

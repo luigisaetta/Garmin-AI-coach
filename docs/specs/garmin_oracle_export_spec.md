@@ -1,5 +1,7 @@
 # Garmin-to-Oracle Export Subproject Specification
 
+Last Modified: 2026-07-15
+
 ## 1. Purpose
 
 This document specifies the Garmin-to-Oracle data transfer subproject of
