@@ -152,9 +152,22 @@ model unless they can be assigned to an equivalent zone-profile version.
 
 ## 7. Data preparation outputs
 
-Data preparation reads the Oracle activity tables and the manual label file. It
-creates a reproducible tabular feature dataset after applying the eligibility,
-feature, and missing-value rules in this specification.
+The full data-preparation workflow reads the Oracle activity tables and the
+manual label file. It creates a reproducible tabular feature dataset after
+applying the eligibility, feature, and missing-value rules in this
+specification.
+
+Before the Oracle loader is implemented, a local bootstrap extractor may read
+completed portable Garmin export packages directly. It is limited to creating
+the 2025 training CSV template for manual CoachPeaking TRIMP entry. The
+extractor must validate that each package is completed, include only
+`running` activities (excluding `treadmill_running`), and write only the
+activity identifier, local activity start date for label review, the included
+features in section 5.1, the required
+optional-feature missingness indicators, and an empty
+`COACHPEAKING_TRIMP` target column. It must not write raw payloads, activity
+names, coordinates, or other excluded fields. This bootstrap output is not a
+replacement for the later Oracle-based reproducible dataset workflow.
 
 The default local output directory is:
 
