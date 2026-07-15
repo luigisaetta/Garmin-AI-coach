@@ -553,7 +553,16 @@ The assistant backend must access Garmin data only through assistant tools and
 the local provider adapter. Tool calls are selected by the LLM through the
 Responses API; the frontend does not select or call tools directly.
 
-### 8.2 Nutrition domain services
+### 8.2 Garmin export subproject
+
+The planned Garmin-to-Oracle transfer workflow is specified separately in
+`docs/specs/garmin_oracle_export_spec.md`. It is a two-step workflow: a local,
+standalone Garmin exporter creates a portable package, and a separate loader
+later writes that package to an existing Oracle schema. The exporter must reuse
+this specification's `TrainingDataProvider` boundary and privacy rules, but it
+does not require the Docker deployment, MySQL, or application-user credentials.
+
+### 8.3 Nutrition domain services
 
 The nutrition extension should use cohesive Python modules with explicit
 interfaces. The initial domain model should be intentionally small:

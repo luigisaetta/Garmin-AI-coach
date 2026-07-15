@@ -268,6 +268,25 @@ AGENTS.md
 docs/specs/personal_ai_garmin_assistant_spec.md
 ```
 
+## Garmin portable export
+
+After activating the `garmin-ai-coach` Conda environment, export the current
+coach Garmin data scope from the repository root:
+
+```bash
+python -m services.garmin_export \
+  --username garmin@example.com \
+  --from 2026-07-01 \
+  --to 2026-07-07 \
+  --output ./exports
+```
+
+The command prompts for the Garmin Connect password without echoing it and
+stores only a reusable Garmin session token in `data/garmin-export-session`.
+It runs independently of Docker, MySQL, and the assistant deployment. It writes
+an atomic, portable NDJSON package only; it does not connect to Oracle. See
+`docs/specs/garmin_oracle_export_spec.md` for the package contract.
+
 ## Garmin Disclaimer
 
 Garmin is a registered trademark of Garmin Ltd. or its subsidiaries. This
