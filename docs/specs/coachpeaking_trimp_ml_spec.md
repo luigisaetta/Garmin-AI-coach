@@ -42,29 +42,39 @@ CoachPeaking and Garmin may use different heart-rate zone boundaries. The
 model therefore estimates the CoachPeaking output from Garmin features; it does
 not assume Garmin zones are equivalent to CoachPeaking zones.
 
-## 4. Label dataset
+## 4. Manual label file
 
-The Oracle schema will later be extended with this table:
+CoachPeaking TRIMP labels are entered manually in a separate CSV file. The file
+is the input to data preparation; it is not an Oracle source table and must not
+be committed to Git.
+
+The default local path is:
 
 ```text
-GARMIN_ACTIVITY_TRIMP_LABEL
+data/coachpeaking-trimp-labels.csv
 ```
 
-| Column | Purpose |
-|---|---|
-| `OWNER_ID` | Opaque owner identifier. |
-| `GARMIN_ACTIVITY_ID` | Garmin activity identifier. |
-| `TRIMP_SOURCE` | Initially the constant `COACHPEAKING`. |
-| `TRIMP_VALUE` | Effective TRIMP reported by CoachPeaking. |
-| `LABEL_RECORDED_AT_UTC` | Timestamp at which the label was collected. |
+The required UTF-8 CSV format is:
 
-The primary key is `(OWNER_ID, GARMIN_ACTIVITY_ID, TRIMP_SOURCE)`.
+```csv
+GARMIN_ACTIVITY_ID,COACHPEAKING_TRIMP
+123456789,42.5
+```
 
-Each label must be matched deterministically to the Garmin activity. The
-preferred key is the shared external activity identifier when available.
-Otherwise, matching must use a documented combination of activity start time,
-duration, sport, and distance, with ambiguous matches rejected for manual
-review.
+`GARMIN_ACTIVITY_ID` is copied from `activities.ndjson` or from the loaded
+`GARMIN_ACTIVITY` table. `COACHPEAKING_TRIMP` is the effective TRIMP value read
+from CoachPeaking for that completed activity.
+
+The manual label file must contain one row per Garmin activity identifier. It
+must not contain Garmin credentials, session tokens, athlete email addresses,
+or CoachPeaking credentials.
+
+Data preparation supplies `OWNER_ID` as an explicit run parameter and performs
+the deterministic join on `(OWNER_ID, GARMIN_ACTIVITY_ID)`. It rejects duplicate
+activity identifiers, labels for unknown activities, non-numeric values, and
+negative TRIMP values. Activity start time, duration, sport, and distance are
+used as a review report for manually entered labels, not as an alternate
+automatic matching key.
 
 ## 5. Feature set
 
@@ -114,7 +124,7 @@ MAX_ELEVATION_GAIN_METERS
 ```
 
 Historic elevation data is not reliable for part of the available period. This
-exclusion applies to training, validation, inference, feature selection, and
+exclusion applies to training, development, inference, feature selection, and
 derived features.
 
 The model must also exclude Garmin credentials, session data, GPS coordinates,
@@ -133,10 +143,45 @@ Activities missing heart-rate data may be retained only in a separate
 experimentation cohort. They must not be mixed silently with activities having
 valid heart-rate-zone data.
 
-The dataset must record the source export schema version, label collection
-timestamp, and feature-extraction version for reproducibility.
+The dataset must record the source export schema version, data-preparation
+timestamp, feature-extraction version, and `ZONE_PROFILE_VERSION` for
+reproducibility. `ZONE_PROFILE_VERSION` identifies the Garmin and
+CoachPeaking zone configuration applicable to an activity. Activities recorded
+before a material zone-configuration change must be excluded from the first
+model unless they can be assigned to an equivalent zone-profile version.
 
-## 7. Model development approach
+## 7. Data preparation outputs
+
+Data preparation reads the Oracle activity tables and the manual label file. It
+creates a reproducible tabular feature dataset after applying the eligibility,
+feature, and missing-value rules in this specification.
+
+The default local output directory is:
+
+```text
+data/coachpeaking-trimp-dataset/<DATASET_VERSION>/
+```
+
+The process writes these UTF-8 CSV or Parquet files:
+
+```text
+TRIMP_FEATURES.<csv|parquet>
+TRIMP_TRAIN.<csv|parquet>
+TRIMP_DEV.<csv|parquet>
+TRIMP_TEST.<csv|parquet>
+DATASET_MANIFEST.json
+```
+
+`TRIMP_FEATURES` contains all eligible labelled activities before the temporal
+split. `TRIMP_TRAIN`, `TRIMP_DEV`, and `TRIMP_TEST` contain the chronological
+partitions defined in section 9. The manifest records the data-preparation
+version, source import batches, label-file checksum, owner identifier, feature
+list, row counts, date boundaries, and missing-value rules.
+
+The data-preparation output files are derived local data and must not be
+committed to Git.
+
+## 8. Model development approach
 
 The development sequence is deliberately simple:
 
@@ -145,7 +190,7 @@ The development sequence is deliberately simple:
 2. Compare the baseline with a compact tabular non-linear model, such as a
    gradient-boosted tree model or a generalised additive model.
 3. Select the simpler model unless the more complex model provides a material,
-   stable improvement on future-time validation data.
+   stable improvement on future-time development data.
 
 Neural networks are out of scope for the first iteration.
 
@@ -153,15 +198,38 @@ The initial dataset goal is at least 200 labelled running activities. A more
 reliable first evaluation target is 300 or more activities spanning easy runs,
 long runs, interval sessions, races, and recovery runs.
 
-## 8. Evaluation
+## 9. Temporal split and evaluation
 
-Data must be split chronologically, never randomly. For example:
+Data must be split chronologically, never randomly. For an initial dataset
+starting on 2025-01-01 and containing approximately two to three running
+activities per week, the first experiment uses:
 
 ```text
-Oldest activities       -> training set
-Following activities    -> validation set
-Most recent activities  -> final test set
+2025-01-01 to 2025-12-31  -> training set
+2026-01-01 to 2026-03-31  -> development set
+2026-04-01 to 2026-06-30  -> final test set
 ```
+
+This produces an estimated 104 to 156 training activities and 26 to 39
+activities in each development and test period. If the available labelled data
+is smaller, use an earliest 65% training period, followed by 15% development and
+20% test periods. Development and test periods should each contain at least 25
+eligible activities and must end on complete calendar weeks where possible.
+
+The test set is not used for feature selection, hyperparameter selection, or
+missing-value rules. Scaling, imputation, and all feature transformations must
+be fitted on the training set only and then applied unchanged to development and
+test data.
+
+After the first experiment, perform rolling-origin validation:
+
+```text
+Train through a cutoff date -> validate on the following three months
+Advance the cutoff date      -> repeat
+```
+
+This checks whether the estimation remains stable across future training
+periods instead of fitting one favourable historical split.
 
 The evaluation report must include:
 
@@ -175,7 +243,7 @@ The report must explicitly state the covered time period, number of activities,
 missing-feature handling, and whether Garmin and CoachPeaking zone
 configurations were known to differ.
 
-## 9. Future extension: activity heart-rate samples
+## 10. Future extension: activity heart-rate samples
 
 The current portable export contains activity summary zone durations but not an
 activity-level heart-rate time series. If summary features do not estimate
