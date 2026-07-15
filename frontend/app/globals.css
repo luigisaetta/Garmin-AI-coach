@@ -1,7 +1,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-07-10
+ * Last modified: 2026-07-15
  * License: MIT
  */
 
@@ -339,6 +339,15 @@ textarea:disabled {
 .metricsShell {
   display: grid;
   grid-template-rows: auto auto auto;
+  gap: 18px;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.overviewShell {
+  display: grid;
+  grid-template-rows: auto auto auto auto;
   gap: 18px;
   min-width: 0;
   min-height: 100vh;
@@ -1291,6 +1300,203 @@ textarea:disabled {
   border-bottom: 0;
 }
 
+.overviewHero {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.3fr);
+  gap: 18px;
+}
+
+.overviewReadiness,
+.overviewPanel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 42%),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="black"] .overviewReadiness,
+:root[data-theme="black"] .overviewPanel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 42%),
+    var(--surface);
+}
+
+.overviewReadiness {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  min-height: 210px;
+  padding: 24px;
+  border-top: 4px solid var(--accent);
+}
+
+.overviewReadiness.caution {
+  border-top-color: var(--coral);
+}
+
+.overviewReadiness.steady {
+  border-top-color: var(--gold);
+}
+
+.overviewReadiness small,
+.overviewHeroStats small,
+.signalCard small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.overviewReadiness strong {
+  color: var(--text);
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 0.98;
+}
+
+.overviewReadiness p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.overviewHeroStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.overviewHeroStats article {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  min-width: 0;
+  min-height: 210px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.overviewHeroStats article:nth-child(1) {
+  border-top: 4px solid var(--accent);
+}
+
+.overviewHeroStats article:nth-child(2) {
+  border-top: 4px solid var(--coral);
+}
+
+.overviewHeroStats article:nth-child(3) {
+  border-top: 4px solid var(--gold);
+}
+
+.overviewHeroStats strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 28px;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overviewHeroStats span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overviewGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.overviewPanel {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.overviewBars {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(50px, 1fr));
+  gap: 10px;
+  align-items: end;
+  min-height: 220px;
+}
+
+.trendBarFrame.compact {
+  height: 150px;
+}
+
+.signalList {
+  display: grid;
+  gap: 12px;
+}
+
+.signalCard {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.signalCard.caution {
+  border-left-color: var(--coral);
+}
+
+.signalCard.steady {
+  border-left-color: var(--gold);
+}
+
+.signalCard svg {
+  color: var(--accent-strong);
+}
+
+.signalCard.caution svg {
+  color: var(--coral);
+}
+
+.signalCard.steady svg {
+  color: var(--gold);
+}
+
+.signalCard span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.signalCard strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.signalCard small {
+  line-height: 1.45;
+}
+
+.sportMixGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 18px;
+}
+
 .sportCell {
   display: inline-flex;
   align-items: center;
@@ -1467,18 +1673,22 @@ textarea:disabled {
 
   .chatShell,
   .diaryShell,
-  .metricsShell {
+  .metricsShell,
+  .overviewShell {
     height: auto;
     min-height: 100vh;
     padding: 18px;
   }
 
   .diaryGrid,
-  .metricsGrid {
+  .metricsGrid,
+  .overviewHero,
+  .overviewGrid {
     grid-template-columns: 1fr;
   }
 
-  .trendSummaryGrid {
+  .trendSummaryGrid,
+  .sportMixGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1491,7 +1701,8 @@ textarea:disabled {
   .sidebar,
   .chatShell,
   .diaryShell,
-  .metricsShell {
+  .metricsShell,
+  .overviewShell {
     padding: 16px;
   }
 
@@ -1514,7 +1725,9 @@ textarea:disabled {
     grid-template-columns: 1fr;
   }
 
-  .trendSummaryGrid {
+  .trendSummaryGrid,
+  .overviewHeroStats,
+  .sportMixGrid {
     grid-template-columns: 1fr;
   }
 
@@ -1523,6 +1736,12 @@ textarea:disabled {
   }
 
   .trendBars {
+    grid-template-columns: repeat(4, minmax(54px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .overviewBars {
     grid-template-columns: repeat(4, minmax(54px, 1fr));
     overflow-x: auto;
     padding-bottom: 6px;

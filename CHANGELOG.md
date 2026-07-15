@@ -7,6 +7,11 @@
 - Documented that Garmin Connect access now uses only the multi-user credential
   repository and user-scoped session storage. The legacy single-user Garmin
   credential and token path is abandoned and must not be used as a fallback.
+- Added the Coach Overview dashboard requirement to the project specification,
+  with goal-adherence explicitly deferred until user goal management exists.
+- Added a separate Coach Overview frontend page as the first navigation item,
+  summarising recent volume, current load, weekly trend, recovery caution, and
+  sport mix from existing user-scoped training endpoints.
 
 ## 2026-07-10
 

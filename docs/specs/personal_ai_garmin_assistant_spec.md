@@ -257,7 +257,25 @@ The training metrics analysis service must:
 * Treat missing training load, heart-rate, or training-effect values as
   uncertainty rather than inventing detail
 
-### 6.2.2 Training trends dashboard
+### 6.2.2 Coach overview dashboard
+
+The application may expose a Coach Overview dashboard as a separate Next.js
+page. This page should be the first navigation item because it is the primary
+user-facing summary of recent training status.
+
+The Coach Overview is a read-only interpretation layer over existing backend
+training metrics and trend endpoints. It should present simple, visual,
+non-technical summaries such as recent volume, current weekly load, load trend,
+sport mix, and recovery or overload caution signals. It must not present goal
+adherence until explicit user goal management exists.
+
+The frontend may derive display-only labels from compact aggregate responses,
+but it must not call Garmin Connect directly or import Garmin provider code.
+Canonical metrics and trend data must continue to come from backend endpoints
+that resolve the authenticated user and use the user-scoped
+`TrainingDataProvider` boundary.
+
+### 6.2.3 Training trends dashboard
 
 The application may expose a dedicated training trends dashboard in the Next.js
 frontend. This dashboard answers a different question than the interval metrics

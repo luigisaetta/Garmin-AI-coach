@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-07-10
+ * Last modified: 2026-07-15
  * License: MIT
  */
 
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Hash,
+  LayoutDashboard,
   MessageSquareText,
   Moon,
   RotateCcw,
@@ -363,6 +364,10 @@ export default function CoachChat() {
             <MessageSquareText size={17} />
             <h2>Navigation</h2>
           </div>
+          <Link className="navItem" href="/coach-overview">
+            <LayoutDashboard size={16} />
+            <span>Coach overview</span>
+          </Link>
           <Link className="navItem active" href="/" aria-current="page">
             <MessageSquareText size={16} />
             <span>Coach chat</span>

@@ -3,7 +3,7 @@
 /*
  * Author: L. Saetta
  * Version: 0.1.0
- * Last modified: 2026-07-10
+ * Last modified: 2026-07-15
  * License: MIT
  */
 
@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Gauge,
+  LayoutDashboard,
   MessageSquareText,
   Moon,
   RefreshCcw,
@@ -310,6 +311,10 @@ export default function TrainingMetricsPage() {
             <BarChart3 size={17} />
             <h2>Navigation</h2>
           </div>
+          <Link className="navItem" href="/coach-overview">
+            <LayoutDashboard size={16} />
+            <span>Coach overview</span>
+          </Link>
           <Link className="navItem" href="/">
             <MessageSquareText size={16} />
             <span>Coach chat</span>
