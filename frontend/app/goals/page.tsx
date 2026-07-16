@@ -165,6 +165,21 @@ function goalFromApi(goal: ApiRaceGoal): RaceGoal {
   };
 }
 
+function goalToForm(goal: RaceGoal): GoalForm {
+  return {
+    title: goal.title,
+    eventDate: goal.eventDate,
+    sport: goal.sport,
+    eventFormat: goal.eventFormat,
+    segments: goal.segments,
+    distanceKm: goal.distanceKm,
+    priority: goal.priority,
+    goalType: goal.goalType,
+    targetTime: goal.targetTime,
+    notes: goal.notes,
+  };
+}
+
 function formatEventDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "short",
@@ -321,9 +336,8 @@ export default function GoalsPage() {
   }
 
   function editGoal(goal: RaceGoal) {
-    const { id: _id, status: _status, ...goalForm } = goal;
     setEditingId(goal.id);
-    setForm(goalForm);
+    setForm(goalToForm(goal));
     setMessage(`Editing ${goal.title}`);
   }
 
@@ -395,7 +409,7 @@ export default function GoalsPage() {
   }
 
   async function updateStatus(goal: RaceGoal, status: GoalStatus) {
-    const { id: _id, status: _status, ...goalForm } = goal;
+    const goalForm = goalToForm(goal);
     setForm(goalForm);
     setBusy(true);
     try {
