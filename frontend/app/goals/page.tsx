@@ -24,6 +24,7 @@ import {
   Moon,
   Pencil,
   Plus,
+  RotateCcw,
   Sun,
   Target,
   TrendingUp,
@@ -289,6 +290,10 @@ export default function GoalsPage() {
       null,
     [upcomingGoals],
   );
+  const editingGoal = useMemo(
+    () => goals.find((goal) => goal.id === editingId) ?? null,
+    [editingId, goals],
+  );
   const calendarDays = useMemo(() => {
     const firstDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     const mondayOffset = (firstDay.getDay() + 6) % 7;
@@ -431,7 +436,12 @@ export default function GoalsPage() {
       if (!response.ok) throw new Error();
       const updated = goalFromApi((await response.json()) as ApiRaceGoal);
       setGoals((current) => [...current.filter((candidate) => candidate.id !== updated.id), updated]);
-      setMessage(status === "completed" ? `${goal.title} marked completed` : `${goal.title} cancelled`);
+      const statusMessage = {
+        upcoming: `${goal.title} restored as upcoming`,
+        completed: `${goal.title} marked completed`,
+        cancelled: `${goal.title} cancelled`,
+      };
+      setMessage(statusMessage[status]);
     } catch {
       setMessage("Could not update this goal");
     } finally {
@@ -805,7 +815,7 @@ export default function GoalsPage() {
                   <Check size={18} />
                   {editingId ? "Save changes" : "Add race goal"}
                 </button>
-                {editingId ? (
+                {editingGoal?.status === "upcoming" ? (
                   <>
                     <button
                       className="secondaryAction"
@@ -830,6 +840,15 @@ export default function GoalsPage() {
                       Cancel event
                     </button>
                   </>
+                ) : editingGoal ? (
+                  <button
+                    className="secondaryAction"
+                    type="button"
+                    onClick={() => updateStatus(editingGoal, "upcoming")}
+                  >
+                    <RotateCcw size={18} />
+                    Restore as upcoming
+                  </button>
                 ) : null}
               </div>
               <p className="prototypeNote fieldWide">{message}</p>
