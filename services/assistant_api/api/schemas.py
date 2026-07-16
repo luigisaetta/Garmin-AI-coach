@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-14
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -226,4 +226,42 @@ class NutritionPlanResponse(BaseModel):
     file_sha256: str
     extracted_text: str
     uploaded_at: datetime
+    updated_at: datetime
+
+
+class RaceGoalSegmentRequest(BaseModel):
+    """One ordered discipline supplied for a multisport race goal."""
+
+    sport: Literal["swimming", "cycling", "running"]
+    distance_meters: int | None = Field(default=None, gt=0)
+
+
+class RaceGoalRequest(BaseModel):
+    """Request payload for creating or replacing one race goal."""
+
+    title: str = Field(min_length=1, max_length=255)
+    event_date: date
+    sport: Literal["running", "cycling", "swimming", "multisport"]
+    distance_meters: int | None = Field(default=None, gt=0)
+    multisport_format: str | None = Field(default=None, max_length=64)
+    priority: Literal["A", "B", "C"]
+    goal_type: Literal["completion", "finish_time"]
+    target_duration_seconds: int | None = Field(default=None, gt=0)
+    notes: str = Field(default="", max_length=4000)
+    status: Literal["upcoming", "completed", "cancelled"] = "upcoming"
+    segments: list[RaceGoalSegmentRequest] = Field(default_factory=list, max_length=8)
+
+
+class RaceGoalSegmentResponse(RaceGoalSegmentRequest):
+    """Stored segment returned with a race goal."""
+
+    sequence: int
+
+
+class RaceGoalResponse(RaceGoalRequest):
+    """Stored user-owned race goal returned by the assistant API."""
+
+    id: int
+    segments: list[RaceGoalSegmentResponse]
+    created_at: datetime
     updated_at: datetime

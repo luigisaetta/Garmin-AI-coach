@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-22
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -77,4 +77,37 @@ nutrition_plan_current = Table(
     Column("uploaded_at", String(32), nullable=False),
     Column("updated_at", String(32), nullable=False),
     Index("idx_nutrition_plan_current_user", "user_id", unique=True),
+)
+
+race_goals = Table(
+    "race_goals",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, ForeignKey("users.id"), nullable=False),
+    Column("title", String(255), nullable=False),
+    Column("event_date", String(10), nullable=False),
+    Column("sport", String(32), nullable=False),
+    Column("distance_meters", Integer, nullable=True),
+    Column("multisport_format", String(64), nullable=True),
+    Column("priority", String(1), nullable=False),
+    Column("goal_type", String(32), nullable=False),
+    Column("target_duration_seconds", Integer, nullable=True),
+    Column("notes", Text, nullable=False, default=""),
+    Column("status", String(16), nullable=False),
+    Column("created_at", String(32), nullable=False),
+    Column("updated_at", String(32), nullable=False),
+    Index("idx_race_goals_user_event_date", "user_id", "event_date"),
+    Index("idx_race_goals_user_status", "user_id", "status"),
+)
+
+race_goal_segments = Table(
+    "race_goal_segments",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("race_goal_id", Integer, ForeignKey("race_goals.id"), nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("sport", String(32), nullable=False),
+    Column("distance_meters", Integer, nullable=True),
+    UniqueConstraint("race_goal_id", "sequence", name="idx_race_goal_segments_order"),
+    Index("idx_race_goal_segments_goal", "race_goal_id"),
 )

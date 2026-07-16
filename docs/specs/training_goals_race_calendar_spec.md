@@ -15,8 +15,14 @@ use before the application attempts structured training-plan generation.
 
 A frontend-only UX prototype is available at `/goals`. It uses sample data kept
 only in browser memory to validate the create, edit, list, history, and
-calendar experience. It has no backend API, persistence, authenticated data
-access, or analysis integration and must not be represented as stored user data.
+calendar experience. It must not be represented as stored user data.
+
+The backend persistence foundation is implemented: authenticated users can
+create, list, read, replace, and select active single-sport or multisport race
+goals through protected `/training/goals` endpoints. The frontend prototype is
+not connected to those endpoints yet. The compact activity calendar endpoint
+and goal-aware dashboard, chat, and LLM analysis integration remain future
+work.
 
 `personal_ai_garmin_assistant_spec.md` remains authoritative for the
 application architecture, authentication, Garmin provider boundary, OCI
@@ -296,10 +302,11 @@ Normal tests must not use live Garmin Connect or OCI credentials.
 
 ## 11. Delivery sequence
 
-1. Add the MySQL schema, repository, typed backend contracts, and ownership
-   tests.
-2. Add goal list, create/edit form, status transitions, and the active-goal
-   Coach Overview card.
+1. Done: add the MySQL schema, repository, typed backend contracts, and
+   ownership tests.
+2. In progress: connect the goal list and create/edit form to the protected
+   backend contracts, add status transitions to the persisted UI, and add the
+   active-goal Coach Overview card.
 3. Add the bounded calendar view with compact completed-activity markers.
 4. Add explicit goal selection and compact context to metrics analysis and chat.
 5. Evaluate athlete use before specifying generic goals, training plans,

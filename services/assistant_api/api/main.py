@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-10
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -32,6 +32,9 @@ from services.assistant_api.api.schemas import (
     NutritionDiaryRewriteRequest,
     NutritionDiaryRewriteResponse,
     NutritionPlanResponse,
+    RaceGoalRequest,
+    RaceGoalResponse,
+    RaceGoalSegmentResponse,
     TrainingMetricsAnalysisRequest,
     TrainingMetricsAnalysisResponse,
     TrainingMetricsResponse,
@@ -67,6 +70,12 @@ from services.assistant_api.nutrition.analysis import (
 )
 from services.assistant_api.nutrition.plan import NutritionPlan, NutritionPlanService
 from services.assistant_api.identity.users import ApplicationUser, UserRepository
+from services.assistant_api.goals.race_goals import (
+    RaceGoal,
+    RaceGoalInput,
+    RaceGoalSegmentInput,
+    RaceGoalService,
+)
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
     AssistantSettings,
@@ -176,6 +185,12 @@ def get_nutrition_diary_service() -> NutritionDiaryService:
 def get_nutrition_plan_service() -> NutritionPlanService:
     """Create the local nutrition plan persistence service once."""
     return NutritionPlanService(get_database())
+
+
+@lru_cache(maxsize=1)
+def get_race_goal_service() -> RaceGoalService:
+    """Create the user-scoped race-goal persistence service once."""
+    return RaceGoalService(get_database())
 
 
 def get_nutrition_diary_rewrite_service() -> NutritionDiaryRewriteService:
@@ -477,6 +492,85 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-locals,too-many-stateme
         return _training_metrics_response(summary)
 
     @api.post(
+        "/training/goals",
+        response_model=RaceGoalResponse,
+        status_code=201,
+    )
+    async def create_race_goal(
+        request: RaceGoalRequest,
+        current_user: ApplicationUser = Depends(get_current_user),
+        goal_service: RaceGoalService = Depends(get_race_goal_service),
+    ) -> RaceGoalResponse:
+        """Create one race goal owned by the authenticated user."""
+        try:
+            goal = goal_service.create_goal(
+                user_id=current_user.id,
+                goal_input=_race_goal_input(request),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _race_goal_response(goal)
+
+    @api.get("/training/goals", response_model=list[RaceGoalResponse])
+    async def list_race_goals(
+        status: str = "upcoming",
+        current_user: ApplicationUser = Depends(get_current_user),
+        goal_service: RaceGoalService = Depends(get_race_goal_service),
+    ) -> list[RaceGoalResponse]:
+        """List upcoming or historical goals for the authenticated user."""
+        try:
+            goals = goal_service.list_goals(user_id=current_user.id, status=status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return [_race_goal_response(goal) for goal in goals]
+
+    @api.get("/training/goals/active", response_model=RaceGoalResponse)
+    async def get_active_race_goal(
+        sport: str | None = None,
+        current_user: ApplicationUser = Depends(get_current_user),
+        goal_service: RaceGoalService = Depends(get_race_goal_service),
+    ) -> RaceGoalResponse:
+        """Return the deterministic active goal for one optional sport."""
+        if sport not in {None, "running", "cycling", "swimming", "multisport"}:
+            raise HTTPException(status_code=422, detail="unsupported sport")
+        goal = goal_service.get_active_goal(user_id=current_user.id, sport=sport)
+        if goal is None:
+            raise HTTPException(status_code=404, detail="Active race goal not found")
+        return _race_goal_response(goal)
+
+    @api.get("/training/goals/{goal_id}", response_model=RaceGoalResponse)
+    async def get_race_goal(
+        goal_id: int,
+        current_user: ApplicationUser = Depends(get_current_user),
+        goal_service: RaceGoalService = Depends(get_race_goal_service),
+    ) -> RaceGoalResponse:
+        """Return one race goal when it belongs to the authenticated user."""
+        goal = goal_service.get_goal(user_id=current_user.id, goal_id=goal_id)
+        if goal is None:
+            raise HTTPException(status_code=404, detail="Race goal not found")
+        return _race_goal_response(goal)
+
+    @api.patch("/training/goals/{goal_id}", response_model=RaceGoalResponse)
+    async def update_race_goal(
+        goal_id: int,
+        request: RaceGoalRequest,
+        current_user: ApplicationUser = Depends(get_current_user),
+        goal_service: RaceGoalService = Depends(get_race_goal_service),
+    ) -> RaceGoalResponse:
+        """Replace mutable data for one goal owned by the authenticated user."""
+        try:
+            goal = goal_service.update_goal(
+                user_id=current_user.id,
+                goal_id=goal_id,
+                goal_input=_race_goal_input(request),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if goal is None:
+            raise HTTPException(status_code=404, detail="Race goal not found")
+        return _race_goal_response(goal)
+
+    @api.post(
         "/training/metrics/analysis",
         response_model=TrainingMetricsAnalysisResponse,
     )
@@ -716,6 +810,56 @@ async def _sse_events(
             "delta": str(exc),
         }
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+
+
+def _race_goal_input(request: RaceGoalRequest) -> RaceGoalInput:
+    """Convert the public request contract into domain-layer input."""
+    return RaceGoalInput(
+        title=request.title,
+        event_date=request.event_date,
+        sport=request.sport,
+        distance_meters=request.distance_meters,
+        multisport_format=request.multisport_format,
+        priority=request.priority,
+        goal_type=request.goal_type,
+        target_duration_seconds=request.target_duration_seconds,
+        notes=request.notes,
+        status=request.status,
+        segments=tuple(
+            RaceGoalSegmentInput(
+                sport=segment.sport,
+                distance_meters=segment.distance_meters,
+            )
+            for segment in request.segments
+        ),
+    )
+
+
+def _race_goal_response(goal: RaceGoal) -> RaceGoalResponse:
+    """Convert a stored goal into the API response contract."""
+    return RaceGoalResponse(
+        id=goal.id,
+        title=goal.title,
+        event_date=goal.event_date,
+        sport=goal.sport,
+        distance_meters=goal.distance_meters,
+        multisport_format=goal.multisport_format,
+        priority=goal.priority,
+        goal_type=goal.goal_type,
+        target_duration_seconds=goal.target_duration_seconds,
+        notes=goal.notes,
+        status=goal.status,
+        segments=[
+            RaceGoalSegmentResponse(
+                sequence=segment.sequence,
+                sport=segment.sport,
+                distance_meters=segment.distance_meters,
+            )
+            for segment in goal.segments
+        ],
+        created_at=goal.created_at,
+        updated_at=goal.updated_at,
+    )
 
 
 def _diary_entry_response(
