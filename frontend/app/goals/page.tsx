@@ -45,7 +45,7 @@ type MultisportSegment = {
 };
 
 type RaceGoal = {
-  id: string;
+  id: number;
   title: string;
   eventDate: string;
   sport: Sport;
@@ -57,6 +57,21 @@ type RaceGoal = {
   targetTime: string;
   notes: string;
   status: GoalStatus;
+};
+
+type ApiRaceGoal = {
+  id: number;
+  title: string;
+  event_date: string;
+  sport: Sport;
+  distance_meters: number | null;
+  multisport_format: string | null;
+  priority: Priority;
+  goal_type: GoalType;
+  target_duration_seconds: number | null;
+  notes: string;
+  status: GoalStatus;
+  segments: { sport: MultisportSegment["sport"]; distance_meters: number | null }[];
 };
 
 type GoalForm = Omit<RaceGoal, "id" | "status">;
@@ -116,84 +131,38 @@ function emptyGoalForm(): GoalForm {
   };
 }
 
-function initialGoals(): RaceGoal[] {
-  const today = new Date();
-  return [
-    {
-      id: "rome-marathon",
-      title: "Rome Marathon",
-      eventDate: isoDate(addDays(today, 94)),
-      sport: "running",
-      eventFormat: "",
-      segments: [],
-      distanceKm: "42.195",
-      priority: "A",
-      goalType: "finish_time",
-      targetTime: "03:45:00",
-      notes: "First marathon with a time target.",
-      status: "upcoming",
-    },
-    {
-      id: "coastal-70-3",
-      title: "Coastal 70.3",
-      eventDate: isoDate(addDays(today, 66)),
-      sport: "multisport",
-      eventFormat: "half_iron_distance",
-      segments: [
-        { sport: "swimming", distanceKm: "1.9" },
-        { sport: "cycling", distanceKm: "90" },
-        { sport: "running", distanceKm: "21.1" },
-      ],
-      distanceKm: "113",
-      priority: "A",
-      goalType: "completion",
-      targetTime: "",
-      notes: "Swim, bike, and run are shown as one event context.",
-      status: "upcoming",
-    },
-    {
-      id: "gran-fondo",
-      title: "Spring Gran Fondo",
-      eventDate: isoDate(addDays(today, 43)),
-      sport: "cycling",
-      eventFormat: "",
-      segments: [],
-      distanceKm: "120",
-      priority: "B",
-      goalType: "completion",
-      targetTime: "",
-      notes: "A long endurance day with friends.",
-      status: "upcoming",
-    },
-    {
-      id: "lake-swim",
-      title: "Lake Swim",
-      eventDate: isoDate(addDays(today, 168)),
-      sport: "swimming",
-      eventFormat: "",
-      segments: [],
-      distanceKm: "3",
-      priority: "C",
-      goalType: "completion",
-      targetTime: "",
-      notes: "",
-      status: "upcoming",
-    },
-    {
-      id: "city-half",
-      title: "City Half Marathon",
-      eventDate: isoDate(addDays(today, -61)),
-      sport: "running",
-      eventFormat: "",
-      segments: [],
-      distanceKm: "21.097",
-      priority: "B",
-      goalType: "finish_time",
-      targetTime: "01:48:00",
-      notes: "Completed as a controlled race effort.",
-      status: "completed",
-    },
-  ];
+function durationToText(durationSeconds: number | null) {
+  if (durationSeconds === null) return "";
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.floor((durationSeconds % 3600) / 60);
+  const seconds = durationSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function durationToSeconds(value: string) {
+  const parts = value.split(":").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) return null;
+  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function goalFromApi(goal: ApiRaceGoal): RaceGoal {
+  return {
+    id: goal.id,
+    title: goal.title,
+    eventDate: goal.event_date,
+    sport: goal.sport,
+    eventFormat: goal.multisport_format ?? "",
+    segments: goal.segments.map((segment) => ({
+      sport: segment.sport,
+      distanceKm: segment.distance_meters === null ? "" : String(segment.distance_meters / 1000),
+    })),
+    distanceKm: goal.distance_meters === null ? "" : String(goal.distance_meters / 1000),
+    priority: goal.priority,
+    goalType: goal.goal_type,
+    targetTime: durationToText(goal.target_duration_seconds),
+    notes: goal.notes,
+    status: goal.status,
+  };
 }
 
 function formatEventDate(value: string) {
@@ -259,21 +228,13 @@ function daysLabel(value: string) {
   return `${days} days to go`;
 }
 
-function calendarActivities(year: number, month: number) {
-  return [4, 8, 12, 18, 23, 27]
-    .filter((day) => day <= new Date(year, month + 1, 0).getDate())
-    .map((day) => ({
-      date: isoDate(new Date(year, month, day)),
-      label: day === 12 || day === 27 ? "Long run" : "Workout completed",
-    }));
-}
-
 export default function GoalsPage() {
   const [theme, setTheme] = useState<Theme>("light");
-  const [goals, setGoals] = useState<RaceGoal[]>(initialGoals);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [goals, setGoals] = useState<RaceGoal[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<GoalForm>(emptyGoalForm);
-  const [message, setMessage] = useState("Prototype data — not saved to your account");
+  const [message, setMessage] = useState("Loading your goals");
+  const [busy, setBusy] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
@@ -282,6 +243,10 @@ export default function GoalsPage() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    void loadGoals();
+  }, []);
 
   const upcomingGoals = useMemo(
     () =>
@@ -300,10 +265,6 @@ export default function GoalsPage() {
       upcomingGoals[0] ??
       null,
     [upcomingGoals],
-  );
-  const activities = useMemo(
-    () => calendarActivities(calendarMonth.getFullYear(), calendarMonth.getMonth()),
-    [calendarMonth],
   );
   const calendarDays = useMemo(() => {
     const firstDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -356,45 +317,102 @@ export default function GoalsPage() {
   function startNewGoal() {
     setEditingId(null);
     setForm(emptyGoalForm());
-    setMessage("Add a race goal to this prototype");
+    setMessage("Add a race goal to your account");
   }
 
   function editGoal(goal: RaceGoal) {
     const { id: _id, status: _status, ...goalForm } = goal;
     setEditingId(goal.id);
     setForm(goalForm);
-    setMessage(`Editing ${goal.title} in this prototype`);
+    setMessage(`Editing ${goal.title}`);
   }
 
-  function saveGoal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const goal: RaceGoal = {
-      ...form,
-      id: editingId ?? `goal-${Date.now()}`,
-      status: editingId
-        ? goals.find((candidate) => candidate.id === editingId)?.status ?? "upcoming"
-        : "upcoming",
+  async function loadGoals() {
+    setBusy(true);
+    try {
+      const [upcomingResponse, historyResponse] = await Promise.all([
+        fetch("/api/training/goals?status=upcoming", { cache: "no-store" }),
+        fetch("/api/training/goals?status=history", { cache: "no-store" }),
+      ]);
+      if (!upcomingResponse.ok || !historyResponse.ok) throw new Error();
+      const [upcoming, history] = (await Promise.all([
+        upcomingResponse.json(),
+        historyResponse.json(),
+      ])) as [ApiRaceGoal[], ApiRaceGoal[]];
+      setGoals([...upcoming, ...history].map(goalFromApi));
+      setMessage("Goals loaded");
+    } catch {
+      setMessage("Could not load your goals");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function requestBody(status: GoalStatus, source = form) {
+    const distanceKm = Number(source.distanceKm);
+    const targetDurationSeconds = source.goalType === "finish_time" ? durationToSeconds(source.targetTime) : null;
+    return {
+      title: source.title,
+      event_date: source.eventDate,
+      sport: source.sport,
+      distance_meters: Number.isFinite(distanceKm) && distanceKm > 0 ? Math.round(distanceKm * 1000) : null,
+      multisport_format: source.sport === "multisport" ? source.eventFormat : null,
+      priority: source.priority,
+      goal_type: source.goalType,
+      target_duration_seconds: targetDurationSeconds,
+      notes: source.notes,
+      status,
+      segments: source.sport === "multisport" ? source.segments.map((segment) => {
+        const distanceKm = Number(segment.distanceKm);
+        return {
+          sport: segment.sport,
+          distance_meters: Number.isFinite(distanceKm) && distanceKm > 0 ? Math.round(distanceKm * 1000) : null,
+        };
+      }) : [],
     };
-    setGoals((current) =>
-      editingId
-        ? current.map((candidate) => (candidate.id === editingId ? goal : candidate))
-        : [...current, goal],
-    );
-    setEditingId(goal.id);
-    setMessage("Saved in this browser prototype only");
   }
 
-  function updateStatus(goal: RaceGoal, status: GoalStatus) {
-    setGoals((current) =>
-      current.map((candidate) =>
-        candidate.id === goal.id ? { ...candidate, status } : candidate,
-      ),
-    );
-    setMessage(
-      status === "completed"
-        ? `${goal.title} marked completed in this prototype`
-        : `${goal.title} cancelled in this prototype`,
-    );
+  async function saveGoal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const status = editingId ? goals.find((goal) => goal.id === editingId)?.status ?? "upcoming" : "upcoming";
+    setBusy(true);
+    try {
+      const response = await fetch(editingId ? `/api/training/goals/${editingId}` : "/api/training/goals", {
+        method: editingId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody(status)),
+      });
+      if (!response.ok) throw new Error();
+      const goal = goalFromApi((await response.json()) as ApiRaceGoal);
+      setGoals((current) => [...current.filter((candidate) => candidate.id !== goal.id), goal]);
+      setEditingId(goal.id);
+      setMessage("Goal saved");
+    } catch {
+      setMessage("Could not save this goal");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateStatus(goal: RaceGoal, status: GoalStatus) {
+    const { id: _id, status: _status, ...goalForm } = goal;
+    setForm(goalForm);
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/training/goals/${goal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody(status, goalForm)),
+      });
+      if (!response.ok) throw new Error();
+      const updated = goalFromApi((await response.json()) as ApiRaceGoal);
+      setGoals((current) => [...current.filter((candidate) => candidate.id !== updated.id), updated]);
+      setMessage(status === "completed" ? `${goal.title} marked completed` : `${goal.title} cancelled`);
+    } catch {
+      setMessage("Could not update this goal");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function moveMonth(offset: number) {
@@ -449,16 +467,16 @@ export default function GoalsPage() {
 
         <section className="panel">
           <div className="panelTitle">
-            <CircleAlert size={17} />
-            <h2>Prototype status</h2>
+            <CheckCircle2 size={17} />
+            <h2>Goal storage</h2>
           </div>
-          <div className="statusLine checking">
-            <CircleAlert size={17} />
-            <span>Sample data only</span>
+          <div className={`statusLine ${message.startsWith("Could not") ? "offline" : busy ? "checking" : "online"}`}>
+            {message.startsWith("Could not") ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}
+            <span>{message}</span>
           </div>
           <p className="sidebarHint">
-            Add and edit goals to test the experience. No goal is saved or sent
-            to the assistant yet.
+            Goals are saved for the authenticated user. Calendar activities and
+            goal-aware coach analysis are coming next.
           </p>
         </section>
 
@@ -496,7 +514,7 @@ export default function GoalsPage() {
           </div>
           <span className="topSignal">
             <Flag size={16} />
-            Prototype · sample data
+            Saved to your account
           </span>
         </header>
 
@@ -530,8 +548,8 @@ export default function GoalsPage() {
             <div>
               <strong>Context, not a verdict</strong>
               <p>
-                This prototype does not calculate readiness or recommend a
-                training plan.
+                This page does not calculate readiness or recommend a training
+                plan.
               </p>
             </div>
           </div>
@@ -815,8 +833,7 @@ export default function GoalsPage() {
           </div>
           <div className="calendarLegend" aria-label="Calendar legend">
             <span><i className="raceMarker" /> Race goal</span>
-            <span><i className="activityMarker" /> Completed activity</span>
-            <span><CalendarDays size={14} /> Activities are shown, not planned sessions</span>
+            <span><CalendarDays size={14} /> Activity markers will appear when the calendar data API is available</span>
           </div>
           <div className="calendarGrid" role="grid" aria-label={`Race calendar for ${formatMonth(calendarMonth)}`}>
             {WEEKDAY_LABELS.map((label) => <span className="calendarWeekday" key={label}>{label}</span>)}
@@ -826,7 +843,6 @@ export default function GoalsPage() {
               }
               const dateValue = isoDate(date);
               const goalsForDay = goals.filter((goal) => goal.eventDate === dateValue);
-              const activitiesForDay = activities.filter((activity) => activity.date === dateValue);
               const isToday = dateValue === isoDate(new Date());
               return (
                 <div className={`calendarCell${isToday ? " today" : ""}`} key={dateValue} role="gridcell">
@@ -837,12 +853,6 @@ export default function GoalsPage() {
                         <Flag size={12} />
                         {goal.title}
                       </button>
-                    ))}
-                    {activitiesForDay.map((activity) => (
-                      <span className="calendarActivity" key={activity.label}>
-                        <Activity size={12} />
-                        {activity.label}
-                      </span>
                     ))}
                   </div>
                 </div>
