@@ -13,6 +13,11 @@ The feature is not part of the initial implementation. It is deliberately
 specified separately because its product rules must evolve from real athlete
 use before the application attempts structured training-plan generation.
 
+A frontend-only UX prototype is available at `/goals`. It uses sample data kept
+only in browser memory to validate the create, edit, list, history, and
+calendar experience. It has no backend API, persistence, authenticated data
+access, or analysis integration and must not be represented as stored user data.
+
 `personal_ai_garmin_assistant_spec.md` remains authoritative for the
 application architecture, authentication, Garmin provider boundary, OCI
 integration, privacy requirements, and quality rules. This document becomes

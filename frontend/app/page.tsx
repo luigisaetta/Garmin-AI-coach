@@ -14,6 +14,7 @@ import {
   Bot,
   CheckCircle2,
   CircleAlert,
+  Flag,
   Hash,
   LayoutDashboard,
   MessageSquareText,
@@ -379,6 +380,10 @@ export default function CoachChat() {
           <Link className="navItem" href="/training-trends">
             <TrendingUp size={16} />
             <span>Training trends</span>
+          </Link>
+          <Link className="navItem" href="/goals">
+            <Flag size={16} />
+            <span>Goals & races</span>
           </Link>
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />

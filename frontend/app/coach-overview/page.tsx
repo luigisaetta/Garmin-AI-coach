@@ -14,6 +14,7 @@ import {
   BookOpenText,
   CheckCircle2,
   CircleAlert,
+  Flag,
   Gauge,
   LayoutDashboard,
   MessageSquareText,
@@ -383,6 +384,10 @@ export default function CoachOverviewPage() {
           <Link className="navItem" href="/training-trends">
             <TrendingUp size={16} />
             <span>Training trends</span>
+          </Link>
+          <Link className="navItem" href="/goals">
+            <Flag size={16} />
+            <span>Goals & races</span>
           </Link>
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />

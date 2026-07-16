@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ClipboardList,
   FileText,
+  Flag,
   LayoutDashboard,
   MessageSquareText,
   Moon,
@@ -360,6 +361,10 @@ export default function NutritionDiaryDemo() {
           <Link className="navItem" href="/training-trends">
             <TrendingUp size={16} />
             <span>Training trends</span>
+          </Link>
+          <Link className="navItem" href="/goals">
+            <Flag size={16} />
+            <span>Goals & races</span>
           </Link>
           <Link
             className="navItem active"
