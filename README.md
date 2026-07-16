@@ -71,7 +71,10 @@ proxy, two application services, and a local Python data access layer:
 
 ### Frontend Next.js
 
-The frontend provides the web experience: chat, loading states, errors, and response rendering. It does not access Garmin Connect directly and does not call the AI model directly.
+The frontend provides the web experience: Coach Overview, chat, training
+metrics, training trends, food diary, account settings, loading states, errors,
+and response rendering. It does not access Garmin Connect directly and does
+not call the AI model directly.
 
 ### Assistant backend
 
@@ -84,10 +87,10 @@ The data access layer is the only code path that knows Garmin Connect implementa
 
 ### Nutrition and adherence analysis
 
-The frontend includes an early nutrition diary page for the nutrition adherence
-extension. The page lets the authenticated user select a diary date, choose the
-training context for the day, describe meals and notes in free text, and save or
-update the selected day.
+The frontend includes a nutrition diary page for the nutrition adherence
+extension. The authenticated user can select a diary date, choose the training
+context for the day, describe meals and notes in free text, improve unsaved
+meal text with an optional AI rewrite, and save or update the selected day.
 
 The same page includes a nutrition-plan upload widget. The user can upload one
 PDF nutrition plan; uploading a new PDF replaces the previous current plan. The
@@ -103,6 +106,28 @@ Compose runs MySQL Community Edition in a dedicated container and mounts its
 data directory from the host filesystem so entries, plans, application users,
 and Garmin credential metadata survive rebuilds, stop/start cycles, and
 restarts.
+
+### Training dashboards
+
+The current frontend has three read-only, user-scoped training views in
+addition to chat:
+
+- **Coach Overview** summarises recent volume, current load, weekly trend,
+  recovery caution, and sport mix. When the ISO week is in progress, it labels
+  the load as partial and projects it before comparing it with completed weeks.
+- **Training metrics** shows running, cycling, and swimming aggregates for the
+  last 7 or 30 days, the current month, or a custom inclusive range. It includes
+  volume, activity count, Garmin training load (or a clearly identified
+  intensity-minutes fallback), load per hour, duration-weighted heart rate, and
+  aerobic and anaerobic training effect. An on-demand OCI analysis can provide
+  a coaching-style interpretation of the selected range.
+- **Training trends** shows weekly ISO-week load, sport mix, four-week rolling
+  average, week-over-week change, and acute/chronic load ratio for 8, 12, or 16
+  weeks.
+
+These views obtain compact aggregates from the backend through the existing
+Next.js proxy routes. The browser does not calculate the canonical metrics or
+contact Garmin Connect.
 
 ### Local multi-user model
 
@@ -126,44 +151,46 @@ plan are also scoped by `user_id`.
 - Python code must use Python 3.11 or newer, clear typing, small modules, and tests with `pytest`.
 - Changes must stay small, verifiable, and consistent with the specification.
 
-## Milestones
-
-1. Done: Repository skeleton with Docker Compose, health endpoints, and a basic frontend page.
-2. Done: Garmin data provider foundation with provider methods, PII redaction, session reuse, and mocked tests.
-3. Done: Assistant backend foundation with chat endpoints, local training provider tools, date range inference, and OCI Enterprise AI Responses API integration.
-4. Done: Frontend chat flow with streaming responses, loading states, error states, Markdown rendering, and token usage display.
-5. Done: Local deployment hardening with Docker Compose, NGINX reverse proxy, environment variables, health checks, and operating documentation.
-6. Implemented MVP: Nutrition diary, PDF plan upload, MySQL-backed per-user persistence, and on-demand adherence analysis through assistant tooling.
-7. Implemented foundation: Local multi-user support with Basic Auth, application users, backend current-user resolution, user-scoped Garmin credentials, user-scoped Garmin session storage, and user-scoped nutrition data.
-
-Remaining polish is tracked in the specification and migration notes: clearer
-frontend handling of 401/403 responses, current-user display/logout guidance for
-Basic Auth, broader HTTP-level cross-user tests, and eventual retirement of the
-legacy single-user Garmin environment fallback from the default runtime path.
-
 ## Project Status
 
-The project now has a first working vertical slice:
+The current implementation is a working local, multi-user coaching
+application—not only an early development vertical slice. It is intended for a
+privacy-conscious Docker Compose deployment on a local Intel NUC, while product
+depth and some multi-user experience polish remain in progress.
 
-- A Next.js chatbot frontend with light and black themes, sidebar status indicators, quick prompts, streaming response handling, and Markdown rendering.
-- A frontend navigation menu linking the coaching chat, food diary page, and account settings page.
-- A nutrition diary UI with date selection, training type selection, meal descriptions, notes, local draft preview, save/update flows, and a PDF nutrition-plan upload widget.
-- A FastAPI assistant backend exposing `/health`, `/chat`, `/chat/stream`, nutrition diary endpoints, and nutrition-plan upload/read endpoints.
-- MySQL-backed, user-scoped nutrition diary and nutrition-plan persistence through dedicated backend services.
-- On-demand nutrition adherence analysis that uses the current user's nutrition plan, diary entries, and Garmin training context.
-- Responses API integration for OCI Enterprise AI using model `openai.gpt-5.5`.
-- Model tool calling with `list_activities`, `get_heart_rates`, and `analyze_nutrition_adherence_period`, backed by local Python service boundaries.
-- A Garmin Connect provider foundation with PII redaction and mocked tests.
-- Local multi-user support with NGINX Basic Auth, a backend `users` table, per-user encrypted Garmin credentials, and per-user Garmin session storage.
-- Backend logging for request flow, model calls, tool execution, and stream completion.
-- Docker Compose and Dockerfiles for the current browser-facing `nginx` service plus internal `frontend`, `assistant_api`, and `mysql` services.
+Implemented capabilities include:
 
-The current implementation is still an early local development version. It
-requires local environment configuration for OCI inference and a
-`GARMIN_CREDENTIAL_ENCRYPTION_KEY` before live end-to-end coaching questions can
-use real Garmin data. Garmin credentials are configured per authenticated user
-from the account page and are stored encrypted in local MySQL. The nutrition
-MVP stores daily entries and one current extracted nutrition plan per user.
+- NGINX Basic Auth at the browser boundary, stable local application users,
+  backend-enforced current-user resolution, encrypted per-user Garmin
+  credentials, and user-scoped Garmin session storage.
+- A Next.js interface with light and black themes, navigation, streaming
+  Markdown chat, token-usage display, account management, Coach Overview,
+  training metrics, training trends, and food diary pages.
+- A FastAPI assistant backend with health, streaming chat, Garmin credential,
+  nutrition, training-metrics, training-trends, and metrics-analysis endpoints.
+- OCI Enterprise AI integration through the Responses API, using
+  `openai.gpt-5.5`, with local tool calls for activities, heart-rate data, and
+  nutrition-adherence analysis.
+- A Garmin Connect provider boundary with PII redaction, optional compact
+  activity payloads, per-user credential/session handling, and mocked tests.
+- MySQL Community Edition persistence for users, encrypted Garmin credential
+  metadata, nutrition diary entries, and the current extracted nutrition plan.
+- Nutrition diary save/update and AI rewrite flows, PDF plan text extraction,
+  and on-demand adherence analysis grounded in the user's diary, plan, and
+  Garmin training context.
+- Docker Compose deployment for browser-facing `nginx` plus internal
+  `frontend`, `assistant_api`, and `mysql` services.
+
+To use live Garmin-backed coaching, each authenticated user must configure
+their Garmin credentials in `/account`; the local operator must configure OCI
+inference credentials and `GARMIN_CREDENTIAL_ENCRYPTION_KEY`. The normal runtime
+uses only the multi-user credential repository and user-scoped session storage;
+it does not fall back to legacy single-user Garmin credentials.
+
+Remaining work is deliberately narrower: clearer handling of `401`/`403`
+responses in every frontend proxy route, an explicit current-user display,
+broader HTTP-level cross-user isolation coverage, richer nutrition workflows,
+and future goal management before any goal-adherence feature is introduced.
 
 ## Local Docker Runtime
 
@@ -235,9 +262,6 @@ files.
 
 | Variable | Required | Used by | Description |
 | --- | --- | --- | --- |
-| `GARMIN_USERNAME` | Only for legacy local scripts | examples, fallback provider | Garmin Connect account username for the legacy single-user provider path. |
-| `GARMIN_PASSWORD` | Only for legacy local scripts | examples, fallback provider | Garmin Connect account password for the legacy single-user provider path. |
-| `GARMIN_SESSION_STORAGE_PATH` | Only for legacy local scripts | examples, fallback provider | Path where legacy single-user Garmin session tokens are reused and refreshed. |
 | `GARMIN_CREDENTIAL_ENCRYPTION_KEY` | Yes for multi-user Garmin access | `assistant_api` | Fernet key used to encrypt per-user Garmin credentials in MySQL. |
 | `GARMIN_SESSION_STORAGE_ROOT` | Recommended | `assistant_api` | Root directory for user-scoped Garmin session token storage. Docker defaults this to `/data/garmin-sessions`. |
 | `REDACT_PII` | No | `assistant_api`, Garmin provider | Masks account, owner, location, coordinate, and profile fields before training data can move toward assistant context. Defaults to `true`. |
