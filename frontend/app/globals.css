@@ -1822,6 +1822,14 @@ textarea:disabled {
   line-height: 1.2;
 }
 
+.goalListCount {
+  padding-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .goalCards {
   display: grid;
   gap: 12px;
@@ -1943,6 +1951,13 @@ textarea:disabled {
   font-size: 13px;
 }
 
+.segmentSummary {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .textAction,
 .iconButton {
   display: inline-flex;
@@ -2046,6 +2061,57 @@ textarea:disabled {
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.multisportSegments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.multisportSegments legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.multisportSegments > p {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.segmentField {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.segmentField > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.segmentField input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--text);
+  padding: 0 10px;
 }
 
 .goalTypeFieldset legend {
@@ -2410,6 +2476,10 @@ textarea:disabled {
   }
 
   .goalTypeChoices {
+    grid-template-columns: 1fr;
+  }
+
+  .multisportSegments {
     grid-template-columns: 1fr;
   }
 

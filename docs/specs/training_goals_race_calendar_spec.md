@@ -46,6 +46,8 @@ The first implementation includes:
 * A calendar and list view of the authenticated user's race goals and compact
   summaries of completed Garmin activities.
 * A single active primary goal, selected from the user's upcoming goals.
+* Single-sport races and multisport events, including sprint triathlon and
+  half iron-distance / 70.3 events.
 * Goal context in the Coach Overview, weekly reviews when implemented, training
   metrics analysis, training trends, and interactive chat when relevant.
 * Explicit source and uncertainty descriptions in goal-aware analyses.
@@ -75,8 +77,10 @@ Each record has at least these fields:
 | `user_id` | Backend-owned; never accepted as an authoritative request field. | Enforces ownership. |
 | `title` | Required, concise text. | Identifies the event, for example `Rome Marathon`. |
 | `event_date` | Required ISO calendar date. | Enables calendar placement and countdown. |
-| `sport` | Required: `running`, `cycling`, or `swimming` initially. | Selects relevant training context. |
-| `distance_meters` | Optional positive integer. | Describes the event without forcing a known distance. |
+| `sport` | Required: `running`, `cycling`, `swimming`, or `multisport`. | Selects relevant training context. |
+| `distance_meters` | Optional positive integer for a single-sport event. | Describes the event without forcing a known distance. |
+| `multisport_format` | Required for `multisport`; otherwise null. Initial values are `triathlon_sprint`, `triathlon_olympic`, `half_iron_distance`, `full_iron_distance`, and `other_multisport`. | Identifies the event format without relying on a race brand. |
+| `segments` | Required logical collection for `multisport`; otherwise empty. Every segment has an ordered discipline and optional distance in metres. | Represents swim, bike, run, or another explicitly recorded discipline without flattening them into one misleading distance. |
 | `priority` | Required: `A`, `B`, or `C`. | Distinguishes the main event from secondary events. |
 | `goal_type` | Required: `completion` or `finish_time`. | Defines whether a measurable time target exists. |
 | `target_duration_seconds` | Required only for `finish_time`; otherwise null. | Stores the target as a duration rather than a locale-specific string. |
@@ -98,6 +102,19 @@ Validation rules:
   metadata update.
 * Goals are archived through their status; the initial UI must not offer hard
   deletion.
+* A multisport goal must contain at least two ordered segments. The common
+  triathlon case uses swimming, cycling, and running; the model must not assume
+  a discipline that the athlete did not enter.
+* `distance_meters` and segment distances must not both be treated as a
+  canonical event distance. For a multisport goal, segment distances are the
+  authoritative representation whenever they are available.
+
+`segments` is a domain collection, not an opaque free-text field. The MySQL
+implementation should persist it in a user-scoped `race_goal_segments` child
+table keyed by the owning `race_goal`, with `sequence`, `sport`, and optional
+`distance_meters` columns. This preserves ordering and allows future athlete
+feedback to refine the model without changing goal ownership or public API
+semantics.
 
 ## 5. User experience
 
@@ -109,7 +126,8 @@ navigation.
 The create form must be short and use progressive disclosure:
 
 1. Event title, date, sport, and priority.
-2. Optional distance.
+2. Optional distance for a single-sport race; a multisport format plus ordered
+   disciplines and optional distances for a multisport event.
 3. Goal choice: finish the event or finish within a target time.
 4. Optional notes.
 
@@ -191,10 +209,11 @@ Goal-aware analysis must be deterministic about which goal is used:
 4. If no applicable goal exists, perform the existing analysis without goal
    context and say that no event goal was selected when this matters.
 
-A goal for one sport must not silently shape an analysis for another sport.
-Multi-sport questions may use more than one explicitly selected goal, but the
-first implementation should default to one sport-specific goal to keep the
-interpretation clear.
+A goal for one sport must not silently shape an analysis for another sport. A
+multisport goal may provide event-level context only when selected explicitly
+or when the question concerns the event as a whole. It must not automatically
+shape a running-only, cycling-only, or swimming-only analysis. Segment-specific
+context requires an explicit athlete selection in a future iteration.
 
 ## 8. Use in analyses
 
@@ -221,8 +240,9 @@ list_training_goals(begin_date, end_date)
 ```
 
 Goal data passed to OCI must be compact: title, event date, sport, distance,
-priority, goal type, target duration, and notes when relevant. It must not
-include data belonging to another user.
+multisport format, compact segment descriptors, priority, goal type, target
+duration, and notes when relevant. It must not include data belonging to
+another user.
 
 The dedicated metrics-analysis request may accept an optional `goal_id`.
 Interactive chat should request goal context only when the athlete asks about
@@ -261,10 +281,12 @@ diary or plan.
 
 Implementation must add fast tests for:
 
-* Field validation, target-duration rules, and allowed status transitions.
+* Field validation, target-duration rules, allowed status transitions, and
+  multisport format/segment rules.
 * Current-user ownership enforcement for every CRUD endpoint.
 * Repository isolation between at least two users.
-* Active-goal selection by explicit selection, priority, sport, and event date.
+* Active-goal selection by explicit selection, priority, sport, event date,
+  and the rule that a multisport goal does not implicitly apply to one sport.
 * Calendar range validation and compact response shaping.
 * Goal omission and applicable-goal inclusion in model-tool and analysis
   requests, using mocked OCI and Garmin provider calls.
@@ -293,6 +315,8 @@ the first release:
   more flexible.
 * Whether distance, location, race series, or an external event reference adds
   meaningful value without creating unnecessary private data.
+* Which multisport formats and segment fields athletes actually need beyond
+  swim, bike, and run distances.
 * How much historical goal editing should be allowed.
 * Whether a future training-plan feature should be manual, imported, or both.
 * Which goal-aware messages athletes find useful rather than distracting.

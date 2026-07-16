@@ -35,16 +35,22 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "black";
-type Sport = "running" | "cycling" | "swimming";
+type Sport = "running" | "cycling" | "swimming" | "multisport";
 type Priority = "A" | "B" | "C";
 type GoalType = "completion" | "finish_time";
 type GoalStatus = "upcoming" | "completed" | "cancelled";
+type MultisportSegment = {
+  sport: "swimming" | "cycling" | "running";
+  distanceKm: string;
+};
 
 type RaceGoal = {
   id: string;
   title: string;
   eventDate: string;
   sport: Sport;
+  eventFormat: string;
+  segments: MultisportSegment[];
   distanceKm: string;
   priority: Priority;
   goalType: GoalType;
@@ -59,13 +65,23 @@ const SPORT_LABELS: Record<Sport, string> = {
   running: "Running",
   cycling: "Cycling",
   swimming: "Swimming",
+  multisport: "Multisport",
 };
 
 const SPORT_ICONS = {
   running: Activity,
   cycling: Bike,
   swimming: Waves,
+  multisport: Trophy,
 };
+
+const MULTISPORT_FORMATS = [
+  { value: "triathlon_sprint", label: "Triathlon sprint" },
+  { value: "triathlon_olympic", label: "Olympic-distance triathlon" },
+  { value: "half_iron_distance", label: "Half iron-distance / 70.3" },
+  { value: "full_iron_distance", label: "Full iron-distance" },
+  { value: "other_multisport", label: "Other multisport event" },
+];
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -90,6 +106,8 @@ function emptyGoalForm(): GoalForm {
     title: "",
     eventDate: isoDate(addDays(new Date(), 90)),
     sport: "running",
+    eventFormat: "",
+    segments: [],
     distanceKm: "",
     priority: "A",
     goalType: "completion",
@@ -106,6 +124,8 @@ function initialGoals(): RaceGoal[] {
       title: "Rome Marathon",
       eventDate: isoDate(addDays(today, 94)),
       sport: "running",
+      eventFormat: "",
+      segments: [],
       distanceKm: "42.195",
       priority: "A",
       goalType: "finish_time",
@@ -114,10 +134,30 @@ function initialGoals(): RaceGoal[] {
       status: "upcoming",
     },
     {
+      id: "coastal-70-3",
+      title: "Coastal 70.3",
+      eventDate: isoDate(addDays(today, 66)),
+      sport: "multisport",
+      eventFormat: "half_iron_distance",
+      segments: [
+        { sport: "swimming", distanceKm: "1.9" },
+        { sport: "cycling", distanceKm: "90" },
+        { sport: "running", distanceKm: "21.1" },
+      ],
+      distanceKm: "113",
+      priority: "A",
+      goalType: "completion",
+      targetTime: "",
+      notes: "Swim, bike, and run are shown as one event context.",
+      status: "upcoming",
+    },
+    {
       id: "gran-fondo",
       title: "Spring Gran Fondo",
       eventDate: isoDate(addDays(today, 43)),
       sport: "cycling",
+      eventFormat: "",
+      segments: [],
       distanceKm: "120",
       priority: "B",
       goalType: "completion",
@@ -130,6 +170,8 @@ function initialGoals(): RaceGoal[] {
       title: "Lake Swim",
       eventDate: isoDate(addDays(today, 168)),
       sport: "swimming",
+      eventFormat: "",
+      segments: [],
       distanceKm: "3",
       priority: "C",
       goalType: "completion",
@@ -142,6 +184,8 @@ function initialGoals(): RaceGoal[] {
       title: "City Half Marathon",
       eventDate: isoDate(addDays(today, -61)),
       sport: "running",
+      eventFormat: "",
+      segments: [],
       distanceKm: "21.097",
       priority: "B",
       goalType: "finish_time",
@@ -182,6 +226,26 @@ function goalTarget(goal: Pick<RaceGoal, "goalType" | "targetTime">) {
 
 function goalDistance(distanceKm: string) {
   return distanceKm ? `${distanceKm} km` : "Distance not set";
+}
+
+function multisportFormat(goal: Pick<RaceGoal, "sport" | "eventFormat">) {
+  if (goal.sport !== "multisport") {
+    return null;
+  }
+  return (
+    MULTISPORT_FORMATS.find((format) => format.value === goal.eventFormat)?.label ??
+    "Multisport event"
+  );
+}
+
+function segmentSummary(goal: Pick<RaceGoal, "segments" | "sport">) {
+  if (goal.sport !== "multisport" || goal.segments.length === 0) {
+    return null;
+  }
+  return goal.segments
+    .filter((segment) => segment.distanceKm)
+    .map((segment) => `${SPORT_LABELS[segment.sport]} ${segment.distanceKm} km`)
+    .join(" · ");
 }
 
 function daysLabel(value: string) {
@@ -260,6 +324,33 @@ export default function GoalsPage() {
 
   function updateForm<K extends keyof GoalForm>(field: K, value: GoalForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateSegment(index: number, distanceKm: string) {
+    setForm((current) => ({
+      ...current,
+      segments: current.segments.map((segment, segmentIndex) =>
+        segmentIndex === index ? { ...segment, distanceKm } : segment,
+      ),
+    }));
+  }
+
+  function updateSport(sport: Sport) {
+    setForm((current) => ({
+      ...current,
+      sport,
+      eventFormat: sport === "multisport" ? current.eventFormat : "",
+      segments:
+        sport === "multisport"
+          ? current.segments.length > 0
+            ? current.segments
+            : [
+                { sport: "swimming", distanceKm: "" },
+                { sport: "cycling", distanceKm: "" },
+                { sport: "running", distanceKm: "" },
+              ]
+          : [],
+    }));
   }
 
   function startNewGoal() {
@@ -419,7 +510,7 @@ export default function GoalsPage() {
                   <h3 id="primary-goal-heading">{primaryGoal.title}</h3>
                 </div>
                 <p>
-                  {formatEventDate(primaryGoal.eventDate)} · {SPORT_LABELS[primaryGoal.sport]} · {goalDistance(primaryGoal.distanceKm)}
+                  {formatEventDate(primaryGoal.eventDate)} · {multisportFormat(primaryGoal) ?? SPORT_LABELS[primaryGoal.sport]} · {goalDistance(primaryGoal.distanceKm)}
                 </p>
                 <div className="goalHeroMeta">
                   <span className="priorityBadge priorityA">Priority {primaryGoal.priority}</span>
@@ -453,10 +544,7 @@ export default function GoalsPage() {
                 <span className="eyebrow">Your calendar</span>
                 <h3 id="upcoming-goals-heading">Upcoming goals</h3>
               </div>
-              <button className="analysisButton" type="button" onClick={startNewGoal}>
-                <Plus size={17} />
-                Add race goal
-              </button>
+              <span className="goalListCount">{upcomingGoals.length} upcoming</span>
             </div>
 
             <div className="goalCards">
@@ -478,10 +566,11 @@ export default function GoalsPage() {
                         </span>
                       </div>
                       <div className="goalFacts">
-                        <span>{SPORT_LABELS[goal.sport]}</span>
+                        <span>{multisportFormat(goal) ?? SPORT_LABELS[goal.sport]}</span>
                         <span>{goalDistance(goal.distanceKm)}</span>
                         <span>{goalTarget(goal)}</span>
                       </div>
+                      {segmentSummary(goal) ? <p className="segmentSummary">{segmentSummary(goal)}</p> : null}
                       <div className="goalCardFooter">
                         <strong>{daysLabel(goal.eventDate)}</strong>
                         <button className="textAction" type="button" onClick={() => editGoal(goal)}>
@@ -554,10 +643,11 @@ export default function GoalsPage() {
               </label>
               <label className="field">
                 <span>Sport</span>
-                <select value={form.sport} onChange={(event) => updateForm("sport", event.target.value as Sport)}>
+                <select value={form.sport} onChange={(event) => updateSport(event.target.value as Sport)}>
                   <option value="running">Running</option>
                   <option value="cycling">Cycling</option>
                   <option value="swimming">Swimming</option>
+                  <option value="multisport">Multisport</option>
                 </select>
               </label>
               <label className="field">
@@ -569,7 +659,7 @@ export default function GoalsPage() {
                 </select>
               </label>
               <label className="field">
-                <span>Distance (km, optional)</span>
+                <span>{form.sport === "multisport" ? "Total distance (km, optional)" : "Distance (km, optional)"}</span>
                 <input
                   inputMode="decimal"
                   min="0"
@@ -579,6 +669,45 @@ export default function GoalsPage() {
                   onChange={(event) => updateForm("distanceKm", event.target.value)}
                 />
               </label>
+              {form.sport === "multisport" ? (
+                <>
+                  <label className="field fieldWide">
+                    <span>Multisport format</span>
+                    <select
+                      required
+                      value={form.eventFormat}
+                      onChange={(event) => updateForm("eventFormat", event.target.value)}
+                    >
+                      <option value="">Select the event format</option>
+                      {MULTISPORT_FORMATS.map((format) => (
+                        <option key={format.value} value={format.value}>
+                          {format.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <fieldset className="multisportSegments fieldWide">
+                    <legend>Disciplines and distances</legend>
+                    <p>Optional distances make the event context clearer; they are not a training plan.</p>
+                    {form.segments.map((segment, index) => {
+                      const SegmentIcon = SPORT_ICONS[segment.sport];
+                      return (
+                        <label className="segmentField" key={segment.sport}>
+                          <span><SegmentIcon size={15} /> {SPORT_LABELS[segment.sport]}</span>
+                          <input
+                            inputMode="decimal"
+                            min="0"
+                            placeholder="km"
+                            type="number"
+                            value={segment.distanceKm}
+                            onChange={(event) => updateSegment(index, event.target.value)}
+                          />
+                        </label>
+                      );
+                    })}
+                  </fieldset>
+                </>
+              ) : null}
               <fieldset className="goalTypeFieldset fieldWide">
                 <legend>Goal</legend>
                 <div className="goalTypeChoices">
