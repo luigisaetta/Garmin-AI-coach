@@ -246,6 +246,7 @@ def get_orchestrator() -> AssistantOrchestrator:
         settings=settings,
         inference_client=inference_client,
         training_client=training_client,
+        race_goal_service=get_race_goal_service(),
         nutrition_analysis_agent=NutritionAnalysisSubAgent.create(
             plan_service=get_nutrition_plan_service(),
             diary_service=get_nutrition_diary_service(),

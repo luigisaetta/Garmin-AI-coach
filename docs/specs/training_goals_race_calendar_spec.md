@@ -21,8 +21,10 @@ The backend persistence foundation is implemented: authenticated users can
 create, list, read, replace, and select active single-sport or multisport race
 goals through protected `/training/goals` endpoints. The `/goals` frontend is
 connected to those endpoints for goal creation, editing, completion,
-cancellation, and history. The compact activity calendar endpoint and
-goal-aware dashboard, chat, and LLM analysis integration remain future work.
+cancellation, restoration, and history. Interactive chat can retrieve the
+authenticated athlete's active goal on demand. The compact activity calendar
+endpoint and goal-aware dashboards and dedicated metrics analysis remain future
+work.
 
 `personal_ai_garmin_assistant_spec.md` remains authoritative for the
 application architecture, authentication, Garmin provider boundary, OCI
@@ -246,7 +248,16 @@ history window must remain visible as uncertainty.
 
 ### 8.2 LLM training metrics analysis and chat
 
-The backend may provide local model tools such as:
+The backend provides a local `get_active_training_goal()` tool to interactive
+chat. It returns the nearest applicable active goal for the authenticated
+athlete; chat must request it for questions about an event, target,
+preparation, or a goal-aware comparison. The tool output includes the title,
+event date, sport, distance, multisport format, segments, priority, goal type,
+target duration, and notes. This makes an athlete-provided `half_iron_distance`
+format explicit and prevents the model from guessing a full-distance event from
+the event name or location.
+
+The backend may later provide additional local model tools such as:
 
 ```text
 get_active_training_goal()
@@ -260,10 +271,9 @@ duration, and notes when relevant. It must not include data belonging to
 another user.
 
 The dedicated metrics-analysis request may accept an optional `goal_id`.
-Interactive chat should request goal context only when the athlete asks about
-an event, a target, preparation, or a goal-aware comparison. The assistant must
-describe the goal as athlete-provided context, distinguish observed facts from
-interpretation, and avoid prescriptions or performance guarantees.
+The assistant must describe the goal as athlete-provided context, distinguish
+observed facts from interpretation, and avoid prescriptions or performance
+guarantees.
 
 ### 8.3 Future weekly review
 

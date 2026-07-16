@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-14
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -31,6 +31,7 @@ from services.assistant_api.orchestration.responses_tools import (
     tool_data_sources,
 )
 from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
+from services.assistant_api.goals.race_goals import RaceGoalService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class AssistantOrchestrator:
         settings: AssistantSettings,
         inference_client: Any,
         training_client: TrainingActivitiesClient,
+        race_goal_service: RaceGoalService | None = None,
         nutrition_analysis_agent: Any | None = None,
     ) -> None:
         """Create an assistant orchestrator.
@@ -59,6 +61,7 @@ class AssistantOrchestrator:
             settings: Runtime model and service settings.
             inference_client: OpenAI-compatible client for Responses API calls.
             training_client: Local training data client used by assistant tools.
+            race_goal_service: User-scoped race-goal service used by assistant tools.
             nutrition_analysis_agent: Optional nutrition subagent used by assistant
                 tools for period adherence analysis.
         """
@@ -66,6 +69,7 @@ class AssistantOrchestrator:
         self._inference_client = inference_client
         self._tool_runner = AssistantToolRunner(
             training_client,
+            race_goal_service=race_goal_service,
             nutrition_analysis_agent=nutrition_analysis_agent,
         )
 

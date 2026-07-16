@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-10
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -17,6 +17,7 @@ from services.assistant_api.garmin_errors import (
     safe_garmin_error_message,
 )
 from services.assistant_api.orchestration.training_data import TrainingActivitiesClient
+from services.assistant_api.goals.race_goals import RaceGoal, RaceGoalService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -138,6 +139,21 @@ ANALYZE_NUTRITION_ADHERENCE_TOOL: dict[str, Any] = {
     },
 }
 
+GET_ACTIVE_TRAINING_GOAL_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "get_active_training_goal",
+    "description": (
+        "Return the authenticated athlete's active race goal, including "
+        "multisport format and segments. Use this when the athlete asks about "
+        "a race, event, target, preparation, or training in relation to a goal."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+}
+
 BASE_TOOLS = [
     LIST_ACTIVITIES_TOOL,
     GET_HEART_RATES_TOOL,
@@ -210,6 +226,10 @@ def tool_data_sources(function_calls: list[Any]) -> list[DataSource]:
             type="garmin_hrv_range",
             description="HRV data returned by the local training provider.",
         ),
+        "get_active_training_goal": DataSource(
+            type="training_goal",
+            description="Active race goal returned from the athlete's saved goals.",
+        ),
         "analyze_nutrition_adherence_period": DataSource(
             type="nutrition_adherence_analysis",
             description=(
@@ -273,17 +293,22 @@ class AssistantToolRunner:
     def __init__(
         self,
         training_client: TrainingActivitiesClient,
+        race_goal_service: RaceGoalService | None = None,
         nutrition_analysis_agent: Any | None = None,
     ) -> None:
         """Create a tool runner with access to backend service clients."""
         self._training_client = training_client
+        self._race_goal_service = race_goal_service
         self._nutrition_analysis_agent = nutrition_analysis_agent
 
     def tool_definitions(self) -> list[dict[str, Any]]:
         """Return the tool schemas exposed to the model."""
-        if self._nutrition_analysis_agent is None:
-            return BASE_TOOLS
-        return [*BASE_TOOLS, ANALYZE_NUTRITION_ADHERENCE_TOOL]
+        tools = [*BASE_TOOLS]
+        if self._race_goal_service is not None:
+            tools.append(GET_ACTIVE_TRAINING_GOAL_TOOL)
+        if self._nutrition_analysis_agent is not None:
+            tools.append(ANALYZE_NUTRITION_ADHERENCE_TOOL)
+        return tools
 
     async def run_tool(
         self,
@@ -310,6 +335,8 @@ class AssistantToolRunner:
             return await self._run_get_heart_rates({**arguments, "_user_id": user_id})
         if tool_name == "get_hrv_data":
             return await self._run_get_hrv_data({**arguments, "_user_id": user_id})
+        if tool_name == "get_active_training_goal":
+            return self._run_get_active_training_goal(user_id=user_id)
         if tool_name == "analyze_nutrition_adherence_period":
             return await self._run_analyze_nutrition_adherence(
                 arguments,
@@ -365,6 +392,15 @@ class AssistantToolRunner:
         LOGGER.info("tool get_hrv_data done day_count=%d", len(hrv_data))
         return json.dumps({"hrv_data": hrv_data}, default=str)
 
+    def _run_get_active_training_goal(self, *, user_id: int) -> str:
+        """Return compact user-owned context for the active race goal."""
+        if self._race_goal_service is None:
+            raise ValueError("Race-goal tool is not configured.")
+
+        goal = self._race_goal_service.get_active_goal(user_id=user_id)
+        LOGGER.info("tool get_active_training_goal found=%s", goal is not None)
+        return json.dumps({"goal": _race_goal_output(goal)}, default=str)
+
     async def _run_analyze_nutrition_adherence(
         self,
         arguments: dict[str, Any],
@@ -409,6 +445,32 @@ def parse_tool_arguments(function_call: Any) -> dict[str, Any]:
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be a JSON object.")
     return arguments
+
+
+def _race_goal_output(goal: RaceGoal | None) -> dict[str, Any] | None:
+    """Convert a stored goal into compact, safe model context."""
+    if goal is None:
+        return None
+
+    return {
+        "title": goal.title,
+        "event_date": goal.event_date.isoformat(),
+        "sport": goal.sport,
+        "distance_meters": goal.distance_meters,
+        "multisport_format": goal.multisport_format,
+        "segments": [
+            {
+                "sequence": segment.sequence,
+                "sport": segment.sport,
+                "distance_meters": segment.distance_meters,
+            }
+            for segment in goal.segments
+        ],
+        "priority": goal.priority,
+        "goal_type": goal.goal_type,
+        "target_duration_seconds": goal.target_duration_seconds,
+        "notes": goal.notes,
+    }
 
 
 def _nutrition_analysis_output(result: Any) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-10
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -11,13 +11,14 @@ import json
 # pylint: disable=duplicate-code
 
 from types import SimpleNamespace
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
 
 from services.assistant_api.api.schemas import ChatRequest, TokenUsage
 from services.assistant_api.nutrition.analysis import NutritionAnalysisResult
+from services.assistant_api.goals.race_goals import RaceGoal, RaceGoalSegment
 from services.assistant_api.orchestration.chat import (
     AssistantOrchestrator,
     AssistantSettings,
@@ -253,6 +254,40 @@ class FakeNutritionAnalysisAgent:  # pylint: disable=too-few-public-methods
         )
 
 
+class FakeRaceGoalService:  # pylint: disable=too-few-public-methods
+    """Return a fixed multisport goal and capture ownership-scoped reads."""
+
+    def __init__(self) -> None:
+        """Initialize the fixed Cervia goal used by chat tests."""
+        self.calls: list[dict[str, int | str | None]] = []
+        self.goal = RaceGoal(
+            id=7,
+            user_id=42,
+            title="Cervia 70.3",
+            event_date=date(2026, 9, 20),
+            sport="multisport",
+            distance_meters=None,
+            multisport_format="half_iron_distance",
+            priority="A",
+            goal_type="completion",
+            target_duration_seconds=None,
+            notes="",
+            status="upcoming",
+            segments=(
+                RaceGoalSegment(sequence=1, sport="swimming", distance_meters=1900),
+                RaceGoalSegment(sequence=2, sport="cycling", distance_meters=90000),
+                RaceGoalSegment(sequence=3, sport="running", distance_meters=21100),
+            ),
+            created_at=datetime(2026, 7, 16, tzinfo=UTC),
+            updated_at=datetime(2026, 7, 16, tzinfo=UTC),
+        )
+
+    def get_active_goal(self, *, user_id: int, sport: str | None = None) -> RaceGoal:
+        """Return only the test athlete's active goal."""
+        self.calls.append({"user_id": user_id, "sport": sport})
+        return self.goal
+
+
 @pytest.mark.anyio
 async def test_complete_chat_uses_responses_api_and_garmin_tool_call() -> None:
     """Verify the assistant performs one Responses API tool-call round."""
@@ -351,6 +386,44 @@ async def test_complete_chat_reports_hrv_data_source() -> None:
             "user_id": "1",
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_complete_chat_passes_active_multisport_goal_to_the_model() -> None:
+    """Verify goal-aware chat receives the exact Cervia 70.3 context."""
+    inference_client = FakeInferenceClient(tool_name="get_active_training_goal")
+    training_client = FakeTrainingClient()
+    goal_service = FakeRaceGoalService()
+    orchestrator = AssistantOrchestrator(
+        settings=AssistantSettings(model_id="openai.gpt-5.5"),
+        inference_client=inference_client,
+        training_client=training_client,
+        race_goal_service=goal_service,
+    )
+
+    response = await orchestrator.complete_chat(
+        ChatRequest(message="Come vedi i miei allenamenti verso Cervia?"),
+        user_id=42,
+    )
+
+    goal_output = next(
+        item["output"]
+        for item in inference_client.responses.calls[1]["input"]
+        if item.get("type") == "function_call_output"
+    )
+    goal_context = json.loads(goal_output)["goal"]
+    assert response.data_sources[0].type == "training_goal"
+    assert goal_service.calls == [{"user_id": 42, "sport": None}]
+    assert goal_context["title"] == "Cervia 70.3"
+    assert goal_context["multisport_format"] == "half_iron_distance"
+    assert [segment["distance_meters"] for segment in goal_context["segments"]] == [
+        1900,
+        90000,
+        21100,
+    ]
+    assert "get_active_training_goal" in {
+        tool["name"] for tool in inference_client.responses.calls[0]["tools"]
+    }
 
 
 @pytest.mark.anyio

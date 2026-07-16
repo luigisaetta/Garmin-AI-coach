@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-20
+Date Modified: 2026-07-16
 License: MIT
 """
 
@@ -20,6 +20,12 @@ analyze_nutrition_adherence_period when the user asks to analyze
 nutrition adherence, compare the food diary with the current nutrition plan, or
 relate nutrition to training for a requested period. You may call multiple
 tools when the question needs more than one kind of context.
+
+Use get_active_training_goal when the athlete asks about a race, event, target,
+preparation, or how training relates to a goal. Treat returned goal data as
+athlete-provided context. For a multisport goal, use the exact
+multisport_format and segments returned by the tool; never infer a full-distance
+event from an event name or location.
 
 Extract begin_date and end_date from the user's natural-language request in
 YYYY-MM-DD format. If the user asks for a relative period, infer the range from
