@@ -137,6 +137,11 @@ The create form must be short and use progressive disclosure:
 3. Goal choice: finish the event or finish within a target time.
 4. Optional notes.
 
+Distance inputs are expressed in kilometres and must accept either a decimal
+point or decimal comma, for example `1.9` and `1,9`. The backend converts a
+valid kilometre value to whole metres for storage, so a user never needs to
+enter metres and normal triathlon distances retain their intended precision.
+
 The edit experience must show the current values and let the athlete change an
 upcoming event, mark it completed, or cancel it. It must clearly state that
 changing a goal changes the context used for future analyses, but does not

@@ -145,6 +145,14 @@ function durationToSeconds(value: string) {
   return parts[0] * 3600 + parts[1] * 60 + parts[2];
 }
 
+function kilometersToMeters(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const kilometers = Number(normalized);
+  if (!Number.isFinite(kilometers) || kilometers <= 0) return undefined;
+  return Math.round(kilometers * 1000);
+}
+
 function goalFromApi(goal: ApiRaceGoal): RaceGoal {
   return {
     id: goal.id,
@@ -363,13 +371,14 @@ export default function GoalsPage() {
   }
 
   function requestBody(status: GoalStatus, source = form) {
-    const distanceKm = Number(source.distanceKm);
     const targetDurationSeconds = source.goalType === "finish_time" ? durationToSeconds(source.targetTime) : null;
+    const distanceMeters = kilometersToMeters(source.distanceKm);
+    if (distanceMeters === undefined) throw new Error("Distance must be a positive number");
     return {
       title: source.title,
       event_date: source.eventDate,
       sport: source.sport,
-      distance_meters: Number.isFinite(distanceKm) && distanceKm > 0 ? Math.round(distanceKm * 1000) : null,
+      distance_meters: distanceMeters,
       multisport_format: source.sport === "multisport" ? source.eventFormat : null,
       priority: source.priority,
       goal_type: source.goalType,
@@ -377,10 +386,11 @@ export default function GoalsPage() {
       notes: source.notes,
       status,
       segments: source.sport === "multisport" ? source.segments.map((segment) => {
-        const distanceKm = Number(segment.distanceKm);
+        const distanceMeters = kilometersToMeters(segment.distanceKm);
+        if (distanceMeters === undefined) throw new Error("Segment distance must be a positive number");
         return {
           sport: segment.sport,
-          distance_meters: Number.isFinite(distanceKm) && distanceKm > 0 ? Math.round(distanceKm * 1000) : null,
+          distance_meters: distanceMeters,
         };
       }) : [],
     };
@@ -694,9 +704,9 @@ export default function GoalsPage() {
                 <span>{form.sport === "multisport" ? "Total distance (km, optional)" : "Distance (km, optional)"}</span>
                 <input
                   inputMode="decimal"
-                  min="0"
-                  placeholder="42.195"
-                  type="number"
+                  pattern="[0-9]+([,.][0-9]+)?"
+                  placeholder="42.195 or 42,195"
+                  type="text"
                   value={form.distanceKm}
                   onChange={(event) => updateForm("distanceKm", event.target.value)}
                 />
@@ -728,9 +738,9 @@ export default function GoalsPage() {
                           <span><SegmentIcon size={15} /> {SPORT_LABELS[segment.sport]}</span>
                           <input
                             inputMode="decimal"
-                            min="0"
-                            placeholder="km"
-                            type="number"
+                            pattern="[0-9]+([,.][0-9]+)?"
+                            placeholder="km, e.g. 1.9"
+                            type="text"
                             value={segment.distanceKm}
                             onChange={(event) => updateSegment(index, event.target.value)}
                           />
