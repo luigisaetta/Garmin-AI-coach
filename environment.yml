@@ -15,6 +15,7 @@ dependencies:
       - pydantic
       - pypdf
       - pylint
+      - playwright
       - pymysql
       - pytest
       - python-dotenv

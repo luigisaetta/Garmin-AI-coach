@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .garmin/
+.coachpeaking/
 *.pem
 *.key
 *.crt

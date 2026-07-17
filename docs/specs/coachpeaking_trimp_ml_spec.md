@@ -1,6 +1,6 @@
 # CoachPeaking TRIMP Estimation ML Subproject Specification
 
-Last Modified: 2026-07-15
+Last Modified: 2026-07-17
 
 ## 1. Purpose
 
@@ -68,6 +68,22 @@ from CoachPeaking for that completed activity.
 The manual label file must contain one row per Garmin activity identifier. It
 must not contain Garmin credentials, session tokens, athlete email addresses,
 or CoachPeaking credentials.
+
+### 4.1 CoachPeaking review export
+
+A local Playwright utility may export the CoachPeaking activities visible to
+the authenticated athlete as a review CSV. It is limited to completed running
+activities in a requested calendar year and contains only these columns:
+
+```csv
+activity_type,date,trimp
+running,2025-01-15,42.5
+```
+
+The browser session state and the resulting review CSV are local sensitive
+data and must not be committed to Git. This export is an aid to manual label
+entry; date and activity type are not a deterministic matching key. The final
+label file in section 4 must still use `GARMIN_ACTIVITY_ID`.
 
 Data preparation supplies `OWNER_ID` as an explicit run parameter and performs
 the deterministic join on `(OWNER_ID, GARMIN_ACTIVITY_ID)`. It rejects duplicate
