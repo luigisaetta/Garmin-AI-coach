@@ -72,8 +72,9 @@ or CoachPeaking credentials.
 ### 4.1 CoachPeaking review export
 
 A local Playwright utility may export the CoachPeaking activities visible to
-the authenticated athlete as a review CSV. It is limited to completed running
-activities in a requested calendar year and contains only these columns:
+the authenticated athlete as a review CSV. It selects one requested calendar
+month at a time and is limited to completed running activities. It contains
+only these columns:
 
 ```csv
 activity_type,date,trimp
@@ -84,6 +85,16 @@ The browser session state and the resulting review CSV are local sensitive
 data and must not be committed to Git. This export is an aid to manual label
 entry; date and activity type are not a deterministic matching key. The final
 label file in section 4 must still use `GARMIN_ACTIVITY_ID`.
+
+For the local 2025 bootstrap only, a date-based preparation utility may create
+a review training dataset from `TRIMP_TRAIN_GARMIN.csv` and
+`COACHPEAKING_RUNNING_2025.csv` in one working directory. Garmin activity
+dates are authoritative and every Garmin feature row must remain in the review
+CSV. The utility fills `COACHPEAKING_TRIMP` only when the date occurs exactly
+once in each source. It must leave every other TRIMP field empty, including all
+Garmin duplicate-date rows, and write a JSON report of rows requiring manual
+review. This constrained workflow is not a replacement for the
+identifier-based final label file.
 
 Data preparation supplies `OWNER_ID` as an explicit run parameter and performs
 the deterministic join on `(OWNER_ID, GARMIN_ACTIVITY_ID)`. It rejects duplicate
@@ -145,6 +156,27 @@ derived features.
 
 The model must also exclude Garmin credentials, session data, GPS coordinates,
 routes, activity names, media, raw payloads, and data from other athletes.
+
+### 5.3 Initial pilot feature subset
+
+The first notebook experiment uses a deliberately reduced feature subset to
+avoid obvious arithmetic and derived-metric redundancy:
+
+```text
+DURATION_SECONDS
+AVERAGE_SPEED_MPS
+AVERAGE_RUNNING_CADENCE_SPM
+HR_ZONE_2_SHARE
+HR_ZONE_3_SHARE
+HR_ZONE_4_SHARE
+HR_ZONE_5_SHARE
+```
+
+Each zone share is its zone duration divided by `DURATION_SECONDS`; zone 1 is
+omitted because all five shares sum to one. The pilot excludes distance when
+duration and average speed are present, maximum speed, average and maximum
+heart rate, Garmin training load, and Garmin training-effect values. The
+excluded metrics may be reconsidered only through future-time validation.
 
 ## 6. Data quality and eligibility
 

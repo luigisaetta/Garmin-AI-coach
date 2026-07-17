@@ -11,12 +11,17 @@ dependencies:
       - fastapi
       - garminconnect
       - httpx
+      - ipykernel
+      - jupyterlab
+      - matplotlib
       - openai
+      - pandas
       - pydantic
       - pypdf
       - pylint
       - playwright
       - pymysql
+      - scikit-learn
       - pytest
       - python-dotenv
       - python-multipart

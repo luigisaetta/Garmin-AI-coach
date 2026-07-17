@@ -19,14 +19,21 @@ from pathlib import Path
 from playwright.sync_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
-DEFAULT_APP_URL = "https://app.coachpeaking.com/"
-DEFAULT_ROW_SELECTOR = "tr[data-activity-id], .activity-item, .workout-item"
-DEFAULT_ACTIVITY_TYPE_SELECTOR = ".activity-type, .sport, [data-field='activity-type']"
-DEFAULT_DATE_SELECTOR = "time, .activity-date, .date, [data-field='date']"
-DEFAULT_TRIMP_SELECTOR = ".trimp, [data-field='trimp'], [data-metric='trimp']"
+DEFAULT_APP_URL = (
+    "https://app.coachpeaking.com/"
+    + "scheda_allenamento_atleta.php?prima=3&dopo=4&oggi=1"
+)
+DEFAULT_ROW_SELECTOR = (
+    ".evento-attivita.attivita-sport-1, " + ".evento-allenamento.allenamento-sport-1"
+)
+DEFAULT_ACTIVITY_TYPE_SELECTOR = ""
+DEFAULT_DATE_SELECTOR = "xpath=ancestor::div[contains(@class, 'calendar-table__cell')]"
+DEFAULT_TRIMP_SELECTOR = ".ev-all__content--trimp"
 CSV_COLUMNS = ("activity_type", "date", "trimp")
 RUNNING_ACTIVITY_TYPES = frozenset({"run", "running", "corsa"})
 DATE_PATTERN = re.compile(r"\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\b")
+CALENDAR_DAY_CLASS_PATTERN = re.compile(r"\bday-(\d{4}-\d{2}-\d{2})\b")
+MONTH_PATTERN = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 NUMBER_PATTERN = re.compile(r"-?\d+(?:[.,]\d+)?")
 
 
@@ -60,7 +67,7 @@ class RunningTrimpRecord:
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser for login and export modes."""
     parser = argparse.ArgumentParser(
-        description="Export CoachPeaking 2025 running activity dates and TRIMP values."
+        description="Export CoachPeaking running activity dates and TRIMP values."
     )
     parser.add_argument(
         "--storage-state",
@@ -71,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--activities-url",
         default=DEFAULT_APP_URL,
-        help="Authenticated CoachPeaking page containing the filtered activity list.",
+        help="Authenticated CoachPeaking calendar page.",
     )
     parser.add_argument(
         "--login",
@@ -81,11 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/coachpeaking-trimp-labels/coachpeaking-running-2025.csv"),
-        help="Review CSV path to create.",
+        help="Review CSV path to create; defaults to a month-specific filename.",
     )
     parser.add_argument(
-        "--year", type=int, default=2025, help="Activity year to export."
+        "--month",
+        type=parse_month,
+        help="Calendar month to export in YYYY-MM form, for example 2025-01.",
     )
     parser.add_argument("--row-selector", default=DEFAULT_ROW_SELECTOR)
     parser.add_argument(
@@ -115,10 +123,10 @@ def export_running_trimp(
     activities_url: str,
     storage_state: Path,
     output_path: Path,
-    activity_year: int,
+    activity_month: date,
     selectors: ActivitySelectors,
 ) -> int:
-    """Export matching activity rows from an already-filtered authenticated page."""
+    """Select one calendar month and export its matching activity rows."""
     if not storage_state.is_file():
         raise ValueError(
             f"CoachPeaking session state not found: {storage_state}. Run with --login first."
@@ -128,14 +136,15 @@ def export_running_trimp(
         context = browser.new_context(storage_state=str(storage_state))
         page = context.new_page()
         page.goto(activities_url, wait_until="networkidle")
-        records = list(extract_running_records(page, activity_year, selectors))
+        select_calendar_month(page, activity_month)
+        records = list(extract_running_records(page, activity_month, selectors))
         browser.close()
     write_review_csv(records, output_path)
     return len(records)
 
 
 def extract_running_records(
-    page: Page, activity_year: int, selectors: ActivitySelectors
+    page: Page, activity_month: date, selectors: ActivitySelectors
 ) -> Iterable[RunningTrimpRecord]:
     """Read valid running records from the currently displayed activity list."""
     try:
@@ -146,16 +155,55 @@ def extract_running_records(
         ) from exc
 
     for row in page.locator(selectors.row).all():
-        activity_type = _required_text(row, selectors.activity_type, "activity type")
-        if _normalise_activity_type(activity_type) not in RUNNING_ACTIVITY_TYPES:
+        if selectors.activity_type:
+            activity_type = _required_text(
+                row, selectors.activity_type, "activity type"
+            )
+            if _normalise_activity_type(activity_type) not in RUNNING_ACTIVITY_TYPES:
+                continue
+        activity_date = _row_activity_date(row, selectors.activity_date)
+        if _month_start(activity_date) != activity_month:
             continue
-        activity_date = parse_activity_date(
-            _required_text(row, selectors.activity_date, "activity date")
-        )
-        if activity_date.year != activity_year:
+        trimp_text = _optional_text(row, selectors.trimp)
+        if trimp_text is None:
             continue
-        trimp = parse_trimp(_required_text(row, selectors.trimp, "TRIMP"))
+        trimp = parse_trimp(trimp_text)
         yield RunningTrimpRecord("running", activity_date, trimp)
+
+
+def select_calendar_month(page: Page, activity_month: date) -> None:
+    """Select one month through the CoachPeaking calendar datepicker."""
+    page.locator(".datepicker.compact .input-group-addon").first.click()
+    picker = _first_visible(
+        page.locator(".bootstrap-datetimepicker-widget"), "calendar datepicker"
+    )
+    picker_switch = _first_visible(
+        picker.locator("[data-action='pickerSwitch']"), "calendar month switch"
+    )
+    picker_switch.click()
+    _first_visible(
+        picker.locator("[data-action='pickerSwitch']"), "calendar year switch"
+    ).click()
+    _first_visible(
+        picker.locator("span.year", has_text=str(activity_month.year)),
+        f"year {activity_month.year}",
+    ).click()
+    _first_visible(
+        picker.locator("span.month").nth(activity_month.month - 1),
+        f"month {activity_month.month}",
+    ).click()
+    _first_visible(
+        picker.locator(f"td[data-day='{_datepicker_day(activity_month)}']"),
+        f"first day of {activity_month:%Y-%m}",
+    ).click()
+    try:
+        page.locator(
+            f".calendar-table__cell.day-{activity_month.isoformat()}"
+        ).first.wait_for(state="visible", timeout=15_000)
+    except PlaywrightTimeoutError as exc:
+        raise ValueError(
+            f"CoachPeaking did not display the requested month: {activity_month:%Y-%m}"
+        ) from exc
 
 
 def write_review_csv(records: Iterable[RunningTrimpRecord], output_path: Path) -> None:
@@ -185,6 +233,14 @@ def parse_activity_date(value: str) -> date:
     raise ValueError(f"Invalid activity date: {candidate!r}")
 
 
+def parse_month(value: str) -> date:
+    """Parse a requested calendar month in strict YYYY-MM form."""
+    match = MONTH_PATTERN.fullmatch(value)
+    if match is None:
+        raise argparse.ArgumentTypeError("Month must use YYYY-MM format.")
+    return date(int(match.group(1)), int(match.group(2)), 1)
+
+
 def parse_trimp(value: str) -> float:
     """Extract one non-negative decimal TRIMP score from a displayed cell."""
     match = NUMBER_PATTERN.search(value)
@@ -207,9 +263,48 @@ def _required_text(row: Locator, selector: str, field_name: str) -> str:
     return value
 
 
+def _optional_text(row: Locator, selector: str) -> str | None:
+    """Return stripped text for an optional descendant selector."""
+    locator = row.locator(selector).first
+    if locator.count() == 0:
+        return None
+    value = locator.inner_text().strip()
+    return value or None
+
+
+def _row_activity_date(row: Locator, selector: str) -> date:
+    """Read the activity date from text or the CoachPeaking calendar-cell class."""
+    date_element = row.locator(selector).first
+    if date_element.count() == 0:
+        raise ValueError("Missing activity date; adjust --date-selector.")
+    class_value = date_element.get_attribute("class") or ""
+    class_match = CALENDAR_DAY_CLASS_PATTERN.search(class_value)
+    if class_match is not None:
+        return date.fromisoformat(class_match.group(1))
+    return parse_activity_date(date_element.inner_text())
+
+
+def _first_visible(locator: Locator, description: str) -> Locator:
+    """Return the first visible locator, skipping hidden CoachPeaking templates."""
+    for candidate in locator.all():
+        if candidate.is_visible():
+            return candidate
+    raise ValueError(f"No visible {description} found in CoachPeaking calendar.")
+
+
 def _normalise_activity_type(value: str) -> str:
     """Normalise a displayed CoachPeaking sport label for an exact comparison."""
     return " ".join(value.casefold().split())
+
+
+def _month_start(value: date) -> date:
+    """Return the canonical first day used for month comparisons."""
+    return value.replace(day=1)
+
+
+def _datepicker_day(activity_month: date) -> str:
+    """Format the first calendar day as required by the CoachPeaking widget."""
+    return activity_month.strftime("%d/%m/%Y")
 
 
 def _format_trimp(value: float) -> str:
@@ -229,16 +324,25 @@ def main() -> None:
         activity_date=arguments.date_selector,
         trimp=arguments.trimp_selector,
     )
+    if arguments.month is None:
+        build_parser().error("--month is required unless --login is used.")
+    output_path = arguments.output or _default_output_path(arguments.month)
     count = export_running_trimp(
         arguments.activities_url,
         arguments.storage_state,
-        arguments.output,
-        arguments.year,
+        output_path,
+        arguments.month,
         selectors,
     )
     print(
-        f"CoachPeaking running TRIMP review export created: {arguments.output} ({count} activities)"
+        f"CoachPeaking running TRIMP review export created: {output_path} ({count} activities)"
     )
+
+
+def _default_output_path(activity_month: date) -> Path:
+    """Return a month-specific path that cannot overwrite another month by default."""
+    filename = f"coachpeaking-running-{activity_month:%Y-%m}.csv"
+    return Path("data/coachpeaking-trimp-labels") / filename
 
 
 if __name__ == "__main__":
