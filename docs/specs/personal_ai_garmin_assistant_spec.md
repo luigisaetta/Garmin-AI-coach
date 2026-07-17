@@ -1,6 +1,6 @@
 # Personal AI Garmin Assistant Specification
 
-Last Modified: 2026-07-15
+Last Modified: 2026-07-17
 
 ## 1. Purpose
 
@@ -564,7 +564,90 @@ later writes that package to an existing Oracle schema. The exporter must reuse
 this specification's `TrainingDataProvider` boundary and privacy rules, but it
 does not require the Docker deployment, MySQL, or application-user credentials.
 
-### 8.3 Nutrition domain services
+### 8.3 Notebook-based training-data research
+
+The repository may include a Jupyter Notebook research area for exploratory
+analysis of Garmin Connect data and for developing and evaluating predictive
+training models. This area makes model assumptions, data quality, and
+validation results visible before any model is considered for integration into
+the assistant backend.
+
+The first research stream is a supervised machine-learning model that predicts
+the CoachPeaking Training Impulse (TRIMP) from Garmin-derived features. The
+CoachPeaking TRIMP is the target label; it is not calculated from Garmin zones
+and the project must not assume that Garmin and CoachPeaking zones coincide.
+Its initial goals are to:
+
+* Inspect the availability and quality of activity duration, heart rate,
+  heart-rate zones, resting heart rate, and maximum heart rate fields.
+* Build a labelled dataset by pairing each eligible Garmin activity with its
+  CoachPeaking TRIMP value using a stable activity mapping and documented
+  label-extraction process.
+* Develop feature engineering from Garmin activity data only, including
+  duration, distance, sport, pace or speed, heart-rate summaries, power,
+  elevation, cadence, Garmin training effect, Garmin training load, and safe
+  stream-derived summaries when available.
+* Train regression models that predict the CoachPeaking TRIMP label and compare
+  them against simple non-ML baselines such as duration-only and sport-specific
+  linear regression.
+* Evaluate the chosen model on unseen future activities and report prediction
+  error, uncertainty, missing-data behaviour, and limitations before it is used
+  in a product feature.
+
+The predicted TRIMP is a training-load estimate, not a medical, injury-risk, or
+readiness diagnosis. CoachPeaking publicly describes its TRIMP as a
+zone-weighted load measure, but its actual per-activity TRIMP values are the
+authoritative labels for this research. The notebooks must not reconstruct
+CoachPeaking labels from its public zone coefficients, use CoachPeaking zone
+durations as input features, or infer equality between Garmin and CoachPeaking
+zone boundaries.
+
+Each notebook must state the target-label source, activity-matching method,
+Garmin input features, exclusions, assumptions, units, and missing-data policy.
+The feature set must exclude any CoachPeaking-only field and any field derived
+from the target label, including assigned-workout TRIMP, CoachPeaking zone
+minutes, CoachPeaking zone configuration, and post-hoc manual adjustments.
+Garmin zone summaries may be evaluated as Garmin-specific features, but must be
+labelled as such and must never be treated as CoachPeaking zones.
+
+Notebook data must use an approved extracted-data workflow:
+
+* Data extraction must use the `TrainingDataProvider` boundary or a documented
+  export generated from that boundary.
+* Notebooks must not make direct `garminconnect` calls, contain credentials,
+  read Garmin session tokens, or require live Garmin or OCI access for normal
+  reruns.
+* Extracted datasets must be limited to the fields needed for analysis,
+  pseudonymised where practical, and excluded from version control unless they
+  are deliberately synthetic fixtures.
+* Raw activity payloads, secrets, and personal notebook outputs must not be
+  committed. Notebooks should be cleared of cell outputs before commit unless a
+  reviewed, non-sensitive output is needed as documentation.
+
+The initial notebook workflow must be reproducible and remain separate from the
+runtime application:
+
+1. A documented extraction step writes a versioned local paired dataset and
+   data dictionary, including the source and timestamp of each target label.
+2. Exploratory notebooks profile feature and label coverage, activity-matching
+   quality, dates, duplicates, outliers, and missingness.
+3. Feature notebooks create Garmin-only features with testable Python functions
+   outside notebook cells where reuse is needed. Tests must cover feature units,
+   missing values, sport-specific handling, and target-leakage exclusions.
+4. Modelling notebooks use chronological train, validation, and test splits;
+   future activities must not be mixed into training data for a later activity.
+   Splits must preserve all records from a single activity in one partition.
+5. Evaluation notebooks report MAE, RMSE, bias, error by sport and TRIMP range,
+   baseline comparison, sample size, date window, uncertainty, and known
+   sources of bias.
+
+The notebooks are not part of the Docker Compose runtime and do not add an
+analytics service, background worker, database, endpoint, or model call. A
+validated model may be proposed for backend integration only through a separate
+task defining its user-facing purpose, input contract, validation threshold,
+privacy treatment, error behaviour, and tests.
+
+### 8.4 Nutrition domain services
 
 The nutrition extension should use cohesive Python modules with explicit
 interfaces. The initial domain model should be intentionally small:
@@ -651,6 +734,11 @@ storage policy update.
 ├── docs
 │   └── specs
 │       └── personal_ai_garmin_assistant_spec.md
+├── research
+│   ├── notebooks
+│   ├── src
+│   ├── tests
+│   └── README.md
 ├── docker-compose.yml
 ├── services
 │   ├── assistant_api
@@ -980,6 +1068,10 @@ Python test categories:
 
 * Unit tests for date range parsing and assistant orchestration logic
 * Unit tests for Garmin response normalisation
+* Unit tests for reusable research functions that calculate TRIMP, clean
+  extracted datasets, or build model features
+* Notebook smoke tests or a documented clean-kernel execution check using
+  synthetic fixtures, when notebooks are introduced
 * Unit tests for nutrition diary validation and weekly adherence analysis
 * Unit tests for nutrition-plan text extraction and parsing when document upload is implemented
 * HTTP tests for service endpoints
@@ -1172,6 +1264,19 @@ Remaining:
 * Removal of any remaining legacy single-user Garmin credential or session
   fallback from runtime documentation and code paths
 
+### Milestone 8, notebook-based TRIMP research
+
+Status: planned.
+
+* Document an extracted, privacy-preserving Garmin analysis dataset and data
+  dictionary
+* Add exploratory data-quality notebooks using synthetic or local ignored data
+* Build a paired Garmin-feature/CoachPeaking-TRIMP labelled dataset
+* Implement and test Garmin-only feature engineering and leakage controls
+* Train and compare supervised regression models against non-ML baselines
+* Add chronological validation notebooks for the selected predictive model
+* Document results and model limitations before proposing runtime integration
+
 ## 22. Open questions
 
 Resolved implementation choices:
@@ -1214,6 +1319,10 @@ Still open:
 * What password policy and session lifetime should be used for local accounts?
 * Should conversations and token usage be stored per user, or remain browser
   session state only?
+* Which safe, repeatable process will export CoachPeaking TRIMP labels and map
+  them to Garmin activity identifiers without exposing credentials?
+* Which non-clinical outcome has enough historical, user-owned data to support
+  meaningful chronological validation of a predictive model?
 
 ## 23. Change control
 
