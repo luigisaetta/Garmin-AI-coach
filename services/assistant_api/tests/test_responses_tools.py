@@ -222,6 +222,19 @@ def test_tool_definitions_include_activity_and_heart_rate_tools() -> None:
     assert "analyze_nutrition_adherence_period" in SYSTEM_PROMPT
 
 
+def test_heart_rate_tool_schema_does_not_require_response_language() -> None:
+    """Verify heart-rate retrieval has no unrelated language parameter."""
+    runner = AssistantToolRunner(FakeTrainingClient())
+    heart_rate_tool = next(
+        tool for tool in runner.tool_definitions() if tool["name"] == "get_heart_rates"
+    )
+
+    parameters = heart_rate_tool["parameters"]
+
+    assert parameters["required"] == ["begin_date", "end_date"]
+    assert "response_language" not in parameters["properties"]
+
+
 def test_tool_definitions_include_nutrition_tool_when_subagent_exists() -> None:
     """Verify nutrition analysis is exposed only when configured."""
     runner = AssistantToolRunner(

@@ -73,17 +73,8 @@ GET_HEART_RATES_TOOL: dict[str, Any] = {
                 "type": "string",
                 "description": "Inclusive end date in YYYY-MM-DD format.",
             },
-            "response_language": {
-                "type": "string",
-                "enum": ["italian", "english"],
-                "description": (
-                    "Language for the nutrition report. Choose italian when "
-                    "the latest user request is in Italian, and english when "
-                    "the latest user request is in English."
-                ),
-            },
         },
-        "required": ["begin_date", "end_date", "response_language"],
+        "required": ["begin_date", "end_date"],
         "additionalProperties": False,
     },
 }
