@@ -29,10 +29,9 @@ export async function POST(request: Request) {
     const response = await fetch(`${ASSISTANT_API_URL}/training/reports`, {
       method: "POST",
       cache: "no-store",
-      headers: {
+      headers: buildBackendHeaders(request, {
         "Content-Type": "application/json",
-        ...buildBackendHeaders(request),
-      },
+      }),
       body: JSON.stringify(payload),
     });
 
