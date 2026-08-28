@@ -157,7 +157,7 @@ export default function TrainingReportsPage() {
         <section className="reportCard">
           {reportState === "idle" ? <p>Select a period and generate a report.</p> : null}
           {reportState === "loading" ? <p>Reading Garmin activity summaries and preparing the report…</p> : null}
-          {report ? <><p className="reportMeta">{report.begin_date} — {report.end_date}{report.uncategorised_activity_count > 0 ? ` · ${report.uncategorised_activity_count} uncategorised activity${report.uncategorised_activity_count === 1 ? "" : "ies"}` : ""}</p><div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.report}</ReactMarkdown></div></> : null}
+          {report ? <><p className="reportMeta">{report.begin_date} — {report.end_date}{report.uncategorised_activity_count > 0 ? ` · ${report.uncategorised_activity_count} attività non classificate` : ""}</p><div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{report.report}</ReactMarkdown></div></> : null}
         </section>
       </section>
     </main>

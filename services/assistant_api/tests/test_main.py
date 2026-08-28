@@ -778,7 +778,7 @@ def test_training_report_returns_deterministic_custom_report() -> None:
     assert response.json()["begin_date"] == "2026-07-01"
     assert response.json()["end_date"] == "2026-07-31"
     assert response.json()["report_type"] == "custom"
-    assert "### Corsa" in response.json()["report"]
+    assert "| Corsa | 1 | 1.0 h |" in response.json()["report"]
     assert FakeMetricsTrainingClient.calls == [
         {
             "user_id": 7,

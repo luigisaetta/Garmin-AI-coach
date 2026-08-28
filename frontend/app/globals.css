@@ -785,6 +785,10 @@ textarea:disabled {
   font-size: 13px;
 }
 
+.reportCard .markdown {
+  overflow-x: auto;
+}
+
 .sidebarAction:hover {
   border-color: #ffd0bd;
   background: rgba(255, 255, 255, 0.15);

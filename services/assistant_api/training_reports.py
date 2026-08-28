@@ -203,9 +203,12 @@ def render_training_report(
         f"Periodo: {begin_date.isoformat()} — {end_date.isoformat()} ({total_days} giorni).",
         "",
         "## Attività per sport",
+        "",
+        "| Sport | Attività | Ore | Distanza | Carico | Bassa | Media | Alta | Non classificata |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for summary in summaries:
-        lines.extend(_sport_report_lines(summary))
+        lines.append(_sport_summary_row(summary))
     if uncategorised_activity_count:
         lines.extend(
             [
@@ -223,94 +226,66 @@ def render_training_report(
             "una conclusione di trend robusta."
         )
     else:
-        lines.extend(_monthly_trend_lines(monthly_summaries))
+        lines.extend(_monthly_trend_table(monthly_summaries))
     return "\n".join(lines)
 
 
-def _sport_report_lines(summary: SportReportSummary) -> list[str]:
-    """Render one sport summary without inferring values that are missing."""
-    lines = ["", f"### {SPORT_LABELS[summary.sport]}"]
-    if summary.activity_count == 0:
-        lines.append("Nessuna attività nell'intervallo.")
-        return lines
-    distance = (
-        f", distanza {_format_distance(summary.distance_metres)}"
-        if summary.distance_count
-        else ""
+def _sport_summary_row(summary: SportReportSummary) -> str:
+    """Render one sport summary as a Markdown table row."""
+    return (
+        f"| {SPORT_LABELS[summary.sport]} | {summary.activity_count} | "
+        f"{_format_hours(summary.duration_seconds)} | "
+        f"{_format_distance(summary.distance_metres) if summary.distance_count else '—'} | "
+        f"{_format_training_load(summary)} | "
+        f"{summary.low_count} | {summary.medium_count} | {summary.high_count} | "
+        f"{summary.unclassified_count} |"
     )
-    training_load = (
-        f", carico {summary.training_load:.0f}"
-        if summary.training_load_count
-        else ", carico non disponibile"
-    )
-    lines.append(
-        f"{summary.activity_count} attività, {_format_hours(summary.duration_seconds)}"
-        f"{distance}{training_load}."
-    )
-    lines.append(
-        "Intensità: "
-        f"bassa {summary.low_count}, media {summary.medium_count}, "
-        f"alta {summary.high_count}, non classificata {summary.unclassified_count}."
-    )
-    return lines
 
 
-def _monthly_trend_lines(months: list[MonthlyReportSummary]) -> list[str]:
-    """Describe comparable monthly changes without treating partial months as full."""
-    lines: list[str] = []
+def _monthly_trend_table(months: list[MonthlyReportSummary]) -> list[str]:
+    """Render monthly changes without treating partial months as complete."""
+    lines = [
+        "",
+        "| Mese | Confronto | Volume | Carico | Intensità bassa/media/alta |",
+        "| --- | --- | ---: | ---: | ---: |",
+    ]
     previous: MonthlyReportSummary | None = None
     for month in months:
         label = month.month_start.strftime("%Y-%m")
+        totals = _combine_summaries(month.sport_summaries)
+        intensity = _intensity_distribution(totals)
         if not month.is_complete:
-            lines.append(
-                f"{label}: mese parziale, non confrontato con il mese precedente."
-            )
+            lines.append(f"| {label} | Mese parziale | — | — | {intensity} |")
             previous = month
             continue
         if previous is None or not previous.is_complete:
-            lines.append(f"{label}: primo mese completo disponibile per il confronto.")
+            lines.append(f"| {label} | Primo mese completo | — | — | {intensity} |")
             previous = month
             continue
-        changes = _month_change_descriptions(previous, month)
+        previous_totals = _combine_summaries(previous.sport_summaries)
         lines.append(
-            f"{label} rispetto a {previous.month_start.strftime('%Y-%m')}: {', '.join(changes)}."
+            f"| {label} | vs {previous.month_start.strftime('%Y-%m')} | "
+            f"{_change_percent(previous_totals.duration_seconds, totals.duration_seconds)} | "
+            f"{_change_percent(previous_totals.training_load, totals.training_load)} | "
+            f"{intensity} |"
         )
         previous = month
-    return lines or ["Nessun mese completo disponibile per il confronto."]
+    return lines
 
 
-def _month_change_descriptions(
-    previous: MonthlyReportSummary,
-    current: MonthlyReportSummary,
-) -> list[str]:
-    """Return compact changes in volume, load, and intensity distribution."""
-    previous_totals = _combine_summaries(previous.sport_summaries)
-    current_totals = _combine_summaries(current.sport_summaries)
-    descriptions = [
-        _change_text(
-            "volume", previous_totals.duration_seconds, current_totals.duration_seconds
-        ),
-        _change_text(
-            "carico", previous_totals.training_load, current_totals.training_load
-        ),
-        (
-            "intensità bassa/media/alta "
-            f"{previous_totals.low_count}/{previous_totals.medium_count}/"
-            f"{previous_totals.high_count} → {current_totals.low_count}/"
-            f"{current_totals.medium_count}/{current_totals.high_count}"
-        ),
-    ]
-    return descriptions
+def _intensity_distribution(summary: SportReportSummary) -> str:
+    """Format the current low, medium, and high intensity counts."""
+    return f"{summary.low_count}/{summary.medium_count}/{summary.high_count}"
 
 
-def _change_text(label: str, previous: float, current: float) -> str:
-    """Describe a month-over-month metric change in neutral language."""
+def _change_percent(previous: float, current: float) -> str:
+    """Format one neutral month-over-month percentage change."""
     if previous == 0:
         if current == 0:
-            return f"{label} invariato"
-        return f"{label} da zero a {current:.0f}"
+            return "0%"
+        return "n/d"
     percent = ((current - previous) / previous) * 100
-    return f"{label} {'+' if percent >= 0 else ''}{percent:.0f}%"
+    return f"{'+' if percent >= 0 else ''}{percent:.0f}%"
 
 
 def _combine_summaries(summaries: list[SportReportSummary]) -> SportReportSummary:
@@ -482,3 +457,8 @@ def _format_hours(seconds: float) -> str:
 def _format_distance(metres: float) -> str:
     """Format Garmin metres as kilometres."""
     return f"{metres / 1000:.1f} km"
+
+
+def _format_training_load(summary: SportReportSummary) -> str:
+    """Format training load only when Garmin supplied at least one value."""
+    return f"{summary.training_load:.0f}" if summary.training_load_count else "—"

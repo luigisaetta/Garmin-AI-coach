@@ -376,6 +376,9 @@ its immediately preceding month only when both months are complete within the
 requested range; an active or partial month must be labelled as such and not
 presented as a complete month-over-month comparison. Periods shorter than four
 weeks must state that there is insufficient data for a strong trend conclusion.
+The deterministic report text must use well-formed Markdown tables for sport
+summaries and monthly trend values so the frontend can render tabular data
+readably.
 
 Garmin activity-list pagination must remain encapsulated in
 `TrainingDataProvider`. The provider must request pages from the existing

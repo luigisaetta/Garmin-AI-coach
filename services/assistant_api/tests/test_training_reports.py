@@ -74,10 +74,11 @@ def test_report_marks_partial_months_and_compares_complete_months() -> None:
         ),
     )
 
-    assert "2026-01: mese parziale" in report.report
-    assert "2026-02: primo mese completo" in report.report
-    assert "2026-03 rispetto a 2026-02: volume +100%" in report.report
-    assert "2026-04: mese parziale" in report.report
+    assert "| Sport | Attività | Ore |" in report.report
+    assert "| 2026-01 | Mese parziale | — | — | 0/0/0 |" in report.report
+    assert "| 2026-02 | Primo mese completo | — | — | 0/1/0 |" in report.report
+    assert "| 2026-03 | vs 2026-02 | +100% | 0% | 0/0/1 |" in report.report
+    assert "| 2026-04 | Mese parziale | — | — | 0/0/0 |" in report.report
 
 
 def test_last_365_day_range_is_inclusive() -> None:
