@@ -1,6 +1,6 @@
 # Personal AI Garmin Assistant Specification
 
-Last Modified: 2026-07-17
+Last Modified: 2026-08-28
 
 ## 1. Purpose
 
@@ -321,6 +321,61 @@ The Docker Compose service boundary remains unchanged for this feature:
 * The assistant backend container performs the analytics and Garmin provider calls
 * No additional analytics, Garmin, cache, or MCP container is introduced for the
   initial dashboard
+
+### 6.2.4 Training reports
+
+The backend may generate two deterministic, Italian-language textual training
+reports for an authenticated user:
+
+* A report covering the most recent 365 inclusive calendar days.
+* A report covering a caller-selected inclusive date range of at most 366 days.
+
+The report endpoint must resolve the authenticated user and read only Garmin
+activity summaries through the user-scoped `TrainingDataProvider` boundary. It
+must not request activity details, streams, daily heart-rate data, HRV data, or
+any additional Garmin resource for this feature. The report is generated in
+Python from deterministic calculations; it does not call OCI Enterprise AI.
+
+Activities must be separated into these report sport categories:
+
+* Running
+* Cycling
+* Pool swimming
+* Open-water swimming
+
+Activities with an unrecognised type, including swimming activities whose
+environment cannot be determined, must not be silently assigned to a category.
+The report must disclose their count when non-zero.
+
+Each categorised activity has an intensity label determined from Garmin
+Training Effect fields:
+
+* Low when `aerobicTrainingEffect` is present and less than 2.0.
+* Medium when `aerobicTrainingEffect` is at least 2.0 and less than 3.5.
+* High when `aerobicTrainingEffect` is at least 3.5 or
+  `anaerobicTrainingEffect` is at least 2.0.
+* Unclassified when no reliable aerobic Training Effect is available and the
+  high-intensity anaerobic condition is not met.
+
+`activityTrainingLoad` measures session load, not intensity. Reports must use
+it for load totals and trends, and must describe missing values as unavailable
+rather than treating them as evidence of low intensity.
+
+For each sport category and for the total period, the report must include
+activity count, duration, distance when available, training-load total when
+available, and the low/medium/high/unclassified intensity distribution. The
+trend section must summarise calendar-month changes in volume, training load,
+and intensity distribution. A month is compared with
+its immediately preceding month only when both months are complete within the
+requested range; an active or partial month must be labelled as such and not
+presented as a complete month-over-month comparison. Periods shorter than four
+weeks must state that there is insufficient data for a strong trend conclusion.
+
+Garmin activity-list pagination must remain encapsulated in
+`TrainingDataProvider`. The provider must request pages from the existing
+Garmin activity-list endpoint only, with a five-second delay between successive
+pages, to reduce throttling risk. It must not add calls to other Garmin
+endpoints for report generation.
 
 ### 6.3 Garmin data access layer
 

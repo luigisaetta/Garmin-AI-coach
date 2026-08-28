@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-16
+Date Modified: 2026-08-28
 License: MIT
 """
 
@@ -149,6 +149,24 @@ class TrainingTrendsResponse(BaseModel):
     end_date: date
     weeks_requested: int
     weeks: list[TrainingTrendWeekResponse]
+
+
+class TrainingReportRequest(BaseModel):
+    """Request one deterministic training report."""
+
+    report_type: Literal["last_365_days", "custom"]
+    begin_date: date | None = None
+    end_date: date | None = None
+
+
+class TrainingReportResponse(BaseModel):
+    """Deterministic textual training report and safe summary metadata."""
+
+    begin_date: date
+    end_date: date
+    report_type: Literal["last_365_days", "custom"]
+    report: str
+    uncategorised_activity_count: int
 
 
 class GarminCredentialRequest(BaseModel):

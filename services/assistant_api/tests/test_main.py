@@ -761,6 +761,34 @@ def test_training_metrics_rejects_reversed_date_range() -> None:
     assert "begin_date" in response.json()["detail"]
 
 
+def test_training_report_returns_deterministic_custom_report() -> None:
+    """Verify the report endpoint uses one user-scoped activity-list request."""
+    client = build_client_with_training_metrics()
+
+    response = client.post(
+        "/training/reports",
+        json={
+            "report_type": "custom",
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["begin_date"] == "2026-07-01"
+    assert response.json()["end_date"] == "2026-07-31"
+    assert response.json()["report_type"] == "custom"
+    assert "### Corsa" in response.json()["report"]
+    assert FakeMetricsTrainingClient.calls == [
+        {
+            "user_id": 7,
+            "begin_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "activity_type": None,
+        }
+    ]
+
+
 def test_training_metrics_analysis_returns_llm_summary() -> None:
     """Verify clients can request an on-demand metrics analysis."""
     client = build_client_with_training_metrics()

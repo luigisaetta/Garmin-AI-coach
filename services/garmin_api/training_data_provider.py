@@ -1,6 +1,6 @@
 """
 Author: L. Saetta
-Date Modified: 2026-05-20
+Date Modified: 2026-08-28
 License: MIT
 """
 
@@ -10,6 +10,7 @@ from datetime import date, timedelta
 import math
 import os
 from pathlib import Path
+import time
 from typing import Any, Protocol
 
 from dotenv import load_dotenv
@@ -46,6 +47,8 @@ PII_KEY_FRAGMENTS = (
 BOOLEAN_TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 BOOLEAN_FALSE_VALUES = frozenset({"0", "false", "no", "n", "off"})
 MAX_FLOAT_DECIMAL_PLACES = 4
+ACTIVITY_PAGE_SIZE = 20
+ACTIVITY_PAGE_DELAY_SECONDS = 5.0
 ACTIVITY_COMPACT_KEYS = frozenset(
     {
         "activityId",
@@ -145,6 +148,7 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         session_storage_path: str | None = None,
         redact_pii: bool | None = None,
         compact_activity_payload: bool | None = None,
+        activity_page_delay_seconds: float = ACTIVITY_PAGE_DELAY_SECONDS,
         client: GarminConnectClient | None = None,
     ) -> None:
         """Create a training data provider.
@@ -166,6 +170,8 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
                 to coaching-relevant summary fields before leaving the provider.
                 When omitted, `GARMIN_COMPACT_ACTIVITY_PAYLOAD` is read from the
                 environment and defaults to disabled.
+            activity_page_delay_seconds: Seconds to wait between successive pages
+                from the Garmin activity-list endpoint. Defaults to five seconds.
             client: Optional Garmin-compatible client, primarily intended for
                 tests and local fakes. The object must expose `login` and
                 `get_activities_by_date`.
@@ -180,6 +186,9 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
         self._compact_activity_payload = self._resolve_compact_activity_payload(
             compact_activity_payload
         )
+        if activity_page_delay_seconds < 0:
+            raise ValueError("activity_page_delay_seconds must not be negative.")
+        self._activity_page_delay_seconds = activity_page_delay_seconds
 
         if client is not None:
             self._client = client
@@ -229,12 +238,57 @@ class TrainingDataProvider:  # pylint: disable=too-few-public-methods
             raise ValueError("begin_date must be earlier than or equal to end_date.")
 
         garmin_activity_type = activity_type.strip() if activity_type else ""
-        activities = self._client.get_activities_by_date(
+        activities = self._get_activity_pages(
             startdate=start.isoformat(),
             enddate=end.isoformat(),
             activitytype=garmin_activity_type,
         )
         return [self._prepare_activity(activity) for activity in activities]
+
+    def _get_activity_pages(
+        self,
+        *,
+        startdate: str,
+        enddate: str,
+        activitytype: str,
+    ) -> list[dict[str, Any]]:
+        """Read activity-list pages with a delay between Garmin requests.
+
+        Real ``garminconnect`` clients expose ``connectapi`` and the activity
+        endpoint URL. Test doubles and alternate compatible clients may expose
+        only the public ``get_activities_by_date`` convenience method; that
+        method remains a safe fallback, although its internal paging cannot be
+        paced by this provider.
+        """
+        connectapi = getattr(self._client, "connectapi", None)
+        activities_url = getattr(self._client, "garmin_connect_activities", None)
+        if not callable(connectapi) or not isinstance(activities_url, str):
+            return self._client.get_activities_by_date(
+                startdate=startdate,
+                enddate=enddate,
+                activitytype=activitytype,
+            )
+
+        activities: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            params = {
+                "startDate": startdate,
+                "endDate": enddate,
+                "start": str(offset),
+                "limit": str(ACTIVITY_PAGE_SIZE),
+            }
+            if activitytype:
+                params["activityType"] = activitytype
+            page = connectapi(
+                activities_url,
+                params=params,
+            )
+            if not page:
+                return activities
+            activities.extend(page)
+            offset += ACTIVITY_PAGE_SIZE
+            time.sleep(self._activity_page_delay_seconds)
 
     def get_heart_rates(
         self,

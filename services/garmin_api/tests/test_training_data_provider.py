@@ -89,6 +89,29 @@ class FakeGarminClient:
         )
 
 
+class PagedFakeGarminClient(FakeGarminClient):
+    """Fake client exposing the low-level activity-list paging interface."""
+
+    garmin_connect_activities = "/activitylist-service/activities/search/activities"
+
+    def __init__(self, pages: list[list[dict[str, Any]]]) -> None:
+        """Configure ordered activity-list pages."""
+        super().__init__()
+        self._pages = pages
+        self.page_calls: list[dict[str, str]] = []
+
+    def connectapi(
+        self,
+        url: str,
+        *,
+        params: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        """Return the next configured page."""
+        assert url == self.garmin_connect_activities
+        self.page_calls.append(params)
+        return self._pages.pop(0)
+
+
 def test_list_activities_returns_all_activity_types_by_default() -> None:
     """Verify that an omitted activity type maps to Garmin's all-activity query."""
     client = FakeGarminClient()
@@ -124,6 +147,25 @@ def test_list_activities_passes_activity_type_filter() -> None:
             "activitytype": "running",
         }
     ]
+
+
+def test_list_activities_paces_explicit_activity_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider pauses five seconds between requests to the activity endpoint."""
+    client = PagedFakeGarminClient(pages=[[{"activityId": 1}], [{"activityId": 2}], []])
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "services.garmin_api.training_data_provider.time.sleep",
+        sleeps.append,
+    )
+    provider = TrainingDataProvider(client=client)
+
+    activities = provider.list_activities("2026-05-01", "2026-05-10")
+
+    assert activities == [{"activityId": 1}, {"activityId": 2}]
+    assert [call["start"] for call in client.page_calls] == ["0", "20", "40"]
+    assert sleeps == [5.0, 5.0]
 
 
 def test_list_activities_rejects_invalid_date_range() -> None:

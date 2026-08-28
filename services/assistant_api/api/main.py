@@ -1,10 +1,12 @@
 """
 Author: L. Saetta
-Date Modified: 2026-07-16
+Date Modified: 2026-08-28
 License: MIT
 """
 
 from __future__ import annotations
+
+# pylint: disable=too-many-lines
 
 import json
 import logging
@@ -38,6 +40,8 @@ from services.assistant_api.api.schemas import (
     TrainingMetricsAnalysisRequest,
     TrainingMetricsAnalysisResponse,
     TrainingMetricsResponse,
+    TrainingReportRequest,
+    TrainingReportResponse,
     TrainingSportMetricsResponse,
     TrainingTrendSportResponse,
     TrainingTrendWeekResponse,
@@ -103,6 +107,10 @@ from services.assistant_api.training_trends import (
     TrainingTrendsSummary,
     WeeklySportTrend,
     WeeklyTrainingTrend,
+)
+from services.assistant_api.training_reports import (
+    TrainingReportService,
+    last_365_day_range,
 )
 from services.shared.llm import get_inference_client
 
@@ -290,6 +298,11 @@ def get_training_metrics_analysis_service() -> TrainingMetricsAnalysisService:
 def get_training_trends_service() -> TrainingTrendsService:
     """Create the training trends service."""
     return TrainingTrendsService()
+
+
+def get_training_report_service() -> TrainingReportService:
+    """Create the deterministic training report service."""
+    return TrainingReportService()
 
 
 def add_request_logging(api: FastAPI) -> None:
@@ -645,6 +658,41 @@ def create_app() -> FastAPI:  # pylint: disable=too-many-locals,too-many-stateme
 
         return _training_trends_response(summary)
 
+    @api.post("/training/reports", response_model=TrainingReportResponse)
+    async def create_training_report(
+        request: TrainingReportRequest,
+        current_user: ApplicationUser = Depends(get_current_user),
+        training_client: TrainingActivitiesClient = Depends(get_training_client),
+        report_service: TrainingReportService = Depends(get_training_report_service),
+    ) -> TrainingReportResponse:
+        """Generate one bounded, deterministic report from activity summaries."""
+        try:
+            begin_date, end_date = _report_date_range(request, today=date.today())
+            result = await report_service.create(
+                training_client=training_client,
+                user_id=current_user.id,
+                begin_date=begin_date,
+                end_date=end_date,
+                report_type=request.report_type,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except GARMIN_PROVIDER_ERRORS as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=safe_garmin_error_message(exc),
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return TrainingReportResponse(
+            begin_date=result.begin_date,
+            end_date=result.end_date,
+            report_type=result.report_type,
+            report=result.report,
+            uncategorised_activity_count=result.uncategorised_activity_count,
+        )
+
     @api.post(
         "/nutrition/diary-entries",
         response_model=NutritionDiaryEntryResponse,
@@ -965,6 +1013,23 @@ def _training_trend_sport_response(
         training_load=sport.training_load,
         activity_count=sport.activity_count,
     )
+
+
+def _report_date_range(
+    request: TrainingReportRequest,
+    *,
+    today: date,
+) -> tuple[date, date]:
+    """Resolve one report request into its inclusive date range."""
+    if request.report_type == "last_365_days":
+        if request.begin_date is not None or request.end_date is not None:
+            raise ValueError(
+                "last_365_days reports must not include begin_date or end_date."
+            )
+        return last_365_day_range(today)
+    if request.begin_date is None or request.end_date is None:
+        raise ValueError("custom reports require begin_date and end_date.")
+    return request.begin_date, request.end_date
 
 
 def _garmin_credential_status_response(
