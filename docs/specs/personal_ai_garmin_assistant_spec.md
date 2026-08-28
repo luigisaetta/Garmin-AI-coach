@@ -158,7 +158,8 @@ The frontend is responsible for:
 * Rendering a nutrition section when the nutrition extension is implemented
 * Sending user messages to the assistant backend
 * Sending nutrition diary entries, plan uploads, and report requests to backend endpoints
-* Displaying responses, errors, loading states, and basic activity summaries
+* Displaying responses, errors, loading states, basic activity summaries, and
+  generated training reports
 * Displaying nutrition adherence summaries without performing backend analysis in the browser
 * Displaying assistant-reported token usage counters for the current chat
 * Keeping browser side logic simple
@@ -329,6 +330,11 @@ reports for an authenticated user:
 
 * A report covering the most recent 365 inclusive calendar days.
 * A report covering a caller-selected inclusive date range of at most 366 days.
+
+The Next.js frontend may expose a dedicated Training Reports page linked after
+Food Diary in the main navigation. It must request reports through the existing
+Next.js backend-proxy pattern and render loading, error, and returned-report
+states without performing training calculations in the browser.
 
 The report endpoint must resolve the authenticated user and read only Garmin
 activity summaries through the user-scoped `TrainingDataProvider` boundary. It

@@ -374,6 +374,10 @@ export default function NutritionDiaryDemo() {
             <BookOpenText size={16} />
             <span>Food diary</span>
           </Link>
+          <Link className="navItem" href="/training-reports">
+            <FileText size={16} />
+            <span>Training reports</span>
+          </Link>
         </nav>
 
         <section className="panel">

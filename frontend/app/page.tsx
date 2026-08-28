@@ -14,6 +14,7 @@ import {
   Bot,
   CheckCircle2,
   CircleAlert,
+  FileText,
   Flag,
   Hash,
   LayoutDashboard,
@@ -22,7 +23,6 @@ import {
   RotateCcw,
   Send,
   Settings2,
-  Sparkles,
   Sun,
   TrendingUp,
   User,
@@ -56,13 +56,6 @@ type AssistantStreamEvent = {
   answer?: string;
   token_usage?: TokenUsage;
 };
-
-const QUICK_PROMPTS = [
-  "Summarise my training this week",
-  "Compare this week with the previous week",
-  "Which runs had unusually high heart rate?",
-  "What should I watch before my next long run?",
-];
 
 const SAMPLE_METRICS = [
   { label: "Focus", value: "Endurance", tone: "teal" },
@@ -389,6 +382,10 @@ export default function CoachChat() {
             <BookOpenText size={16} />
             <span>Food diary</span>
           </Link>
+          <Link className="navItem" href="/training-reports">
+            <FileText size={16} />
+            <span>Training reports</span>
+          </Link>
         </nav>
 
         <section className="panel">
@@ -472,23 +469,6 @@ export default function CoachChat() {
           </button>
         </section>
 
-        <section className="panel prompts">
-          <div className="panelTitle">
-            <Sparkles size={17} />
-            <h2>Prompts</h2>
-          </div>
-          {QUICK_PROMPTS.map((prompt) => (
-            <button
-              className="promptButton"
-              disabled={isStreaming}
-              key={prompt}
-              type="button"
-              onClick={() => sendMessage(prompt)}
-            >
-              {prompt}
-            </button>
-          ))}
-        </section>
       </aside>
 
       <section className="chatShell" aria-label="Conversation">

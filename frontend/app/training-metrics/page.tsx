@@ -15,6 +15,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleAlert,
+  FileText,
   Flag,
   Gauge,
   LayoutDashboard,
@@ -339,6 +340,10 @@ export default function TrainingMetricsPage() {
           <Link className="navItem" href="/nutrition-diary">
             <BookOpenText size={16} />
             <span>Food diary</span>
+          </Link>
+          <Link className="navItem" href="/training-reports">
+            <FileText size={16} />
+            <span>Training reports</span>
           </Link>
         </nav>
 
